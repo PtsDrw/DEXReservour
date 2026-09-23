@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>[DEX] Dragon — Рейд на резервуар</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="css/themes.css" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- Верхняя панель кнопок -->
+  <header class="top-bar">
+    <div class="top-bar__left">
+      <button class="btn btn--ghost" id="btn-alliance">
+        <i class="fa-solid fa-users"></i> Союз
+      </button>
+      <button class="btn btn--ghost" id="btn-history">
+        <i class="fa-solid fa-clock-rotate-left"></i> История
+      </button>
+    </div>
+    <div class="top-bar__right">
+      <button class="btn btn--ghost" id="btn-theme">
+        <i class="fa-solid fa-palette"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Заголовок -->
+  <section class="hero">
+    <h1 class="hero__alliance">[DEX] Dragon</h1>
+    <h2 class="hero__event">Рейд на резервуар</h2>
+    <p class="hero__date" id="event-date">—</p>
+  </section>
+
+  <!-- Участники -->
+  <section class="section">
+    <div class="section__header">
+      <h3 class="section__title">Участники</h3>
+      <div class="section__actions">
+        <button class="btn btn--ghost" id="btn-toggle-placed">
+          <i class="fa-solid fa-eye-slash"></i> Скрыть размещённых
+        </button>
+        <button class="btn btn--primary" id="btn-add-player">
+          <i class="fa-solid fa-plus"></i> Добавить
+        </button>
+      </div>
+    </div>
+
+    <div class="participants">
+      <div class="participants__list" id="participants-list"></div>
+      <div class="role-palette" id="role-palette">
+        <div class="role-chip" data-role="barrel" data-label="Бочка" title="Перетащите игрока сюда — назначить/снять роль Бочка">
+          <i class="fa-solid fa-bottle-water"></i>
+        </div>
+        <div class="role-chip" data-role="pilot" data-label="Летчик" title="Перетащите игрока сюда — назначить/снять роль Летчик">
+          <i class="fa-solid fa-jet-fighter"></i>
+        </div>
+        <div class="role-chip role-chip--clear" data-role="clear" data-label="Сброс" title="Перетащите игрока сюда — снять все роли">
+          <i class="fa-solid fa-rotate-left"></i>
+        </div>
+      </div>
+    </div>
+    <p class="participants__hint">
+      <i class="fa-solid fa-circle-info"></i>
+      Перетащите блок игрока на иконку, чтобы назначить или снять роль. Клик по бейджу «Основа/Резерв» переключает тип. Клик по иконке роли в блоке — снять её.
+    </p>
+  </section>
+
+  <!-- Распределение -->
+  <section class="section">
+    <div class="section__header">
+      <h3 class="section__title">Распределение по точкам</h3>
+      <div class="section__actions">
+        <button class="btn btn--accent" id="btn-auto-allocate">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Распределить автоматически
+        </button>
+        <button class="btn btn--ghost" id="btn-clear-allocate">
+          <i class="fa-solid fa-eraser"></i> Очистить
+        </button>
+      </div>
+    </div>
+
+    <div class="buildings" id="buildings"></div>
+
+    <div class="approve-bar">
+      <button class="btn btn--success btn--lg" id="btn-approve">
+        <i class="fa-solid fa-check"></i> Утвердить
+      </button>
+    </div>
+  </section>
+
+  <!-- Модалка: добавление игрока -->
+  <div class="modal" id="modal-add-player" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Добавить участника</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="modal__body">
+        <div class="field">
+          <label>Поиск по нику</label>
+          <input type="text" id="search-nick" placeholder="Введите ник..." />
+        </div>
+
+        <div class="field">
+          <label>Или новый ник</label>
+          <div class="row">
+            <input type="text" id="new-nick" placeholder="Ник нового игрока" />
+            <div class="switch">
+              <input type="radio" name="new-type" id="new-type-main" value="main" checked />
+              <label for="new-type-main">Основа</label>
+              <input type="radio" name="new-type" id="new-type-reserve" value="reserve" />
+              <label for="new-type-reserve">Резерв</label>
+            </div>
+            <button class="btn btn--primary" id="btn-create-player" title="Добавить">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="alliance-list" id="alliance-list"></div>
+      </div>
+
+      <div class="modal__footer">
+        <span class="modal__counter" id="add-counter">Добавлено: 0</span>
+        <button class="btn btn--success" id="btn-add-done">
+          <i class="fa-solid fa-check"></i> Готово
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка: союз -->
+  <div class="modal" id="modal-alliance" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Состав союза</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal__body" id="alliance-manage-list"></div>
+    </div>
+  </div>
+
+  <!-- Модалка: история -->
+  <div class="modal" id="modal-history" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h4>История расстановок</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal__body" id="history-list"></div>
+    </div>
+  </div>
+
+  <!-- Модалка: тема -->
+  <div class="modal" id="modal-theme" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content modal__content--small">
+      <div class="modal__header">
+        <h4>Тема оформления</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal__body">
+        <div class="theme-grid" id="theme-grid">
+          <button class="theme-swatch" data-theme-value="dark">Тёмная</button>
+          <button class="theme-swatch" data-theme-value="light">Светлая</button>
+          <button class="theme-swatch" data-theme-value="orange">Оранжевая</button>
+          <button class="theme-swatch" data-theme-value="blue">Голубая</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
