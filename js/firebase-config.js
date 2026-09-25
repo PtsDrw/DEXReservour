@@ -21,3 +21,24 @@ export {
 };
 
 
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+export const auth = getAuth(app);
+
+// Функция анонимного входа
+export function ensureAnonymousAuth() {
+  return new Promise((resolve) => {
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        resolve(user);
+      } else {
+        signInAnonymously(auth)
+          .then((cred) => resolve(cred.user))
+          .catch((err) => {
+            console.error('Ошибка анонимного входа:', err);
+            resolve(null);
+          });
+      }
+    });
+  });
+}

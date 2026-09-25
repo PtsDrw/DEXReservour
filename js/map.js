@@ -39,6 +39,8 @@ export function renderMap({
   settings,
   onMarkerClick
 }) {
+  console.log('=== renderMap ===');
+  console.log('settings.mapPositions:', settings.mapPositions);
   const svg = document.getElementById('map-svg');
   if (!svg) return;
 

@@ -12,7 +12,7 @@ import {
   DEFAULT_POSITIONS, DEFAULT_BARREL_ZONES
 } from './map.js';
 import { exportMapAsJpg } from './map-export.js';
-
+import { ensureAnonymousAuth } from './firebase-config.js';
 // ---------- Настройки ----------
 const SETTINGS_KEY = 'raid_planner_settings_v1';
 
@@ -147,8 +147,15 @@ function saveSettingsLocal() {
 
 async function saveSettingsToShared() {
   if (!settings.useSharedSettings) return false;
-  const { presets, ...clean } = settings;
-  return await saveSharedSettings(clean);
+
+  const { presets, mapPositions, ...clean } = settings;
+
+  // Отправляем mapPositions только если оно задано —
+  // чтобы не затирать уже сохранённые позиции карты
+  const payload = { ...clean };
+  if (mapPositions) payload.mapPositions = mapPositions;
+
+  return await saveSharedSettings(payload);
 }
 
 // ---------- Состояние ----------
@@ -256,6 +263,7 @@ window.__toast = toast;
 
 // ---------- Инициализация ----------
 async function init() {
+  await ensureAnonymousAuth();
   if (settings.useSharedSettings) {
     const shared = await getSharedSettings();
     if (shared) {
@@ -1191,20 +1199,49 @@ document.getElementById('btn-map-edit').onclick = () => {
   document.querySelectorAll('.map-tooltip').forEach(t => t.remove());
 };
 
-document.getElementById('btn-map-save').onclick = () => {
-  const positions = getPositions();
-  settings.mapPositions = positions;
-  saveSettingsLocal();
-  if (settings.useSharedSettings) {
-    saveSettingsToShared();
+document.getElementById('btn-map-save').onclick = async () => {
+  const btn = document.getElementById('btn-map-save');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span class="btn-label">Сохраняем…</span>';
+
+  try {
+    // 1. Получаем текущие позиции из модуля карты
+    const positions = getPositions();   // ← обязательно объявляем здесь
+    settings.mapPositions = positions;
+
+    // 2. Сохраняем локально
+    saveSettingsLocal();
+
+    // 3. Синхронизируем с Firebase, если включено
+    let synced = false;
+    if (settings.useSharedSettings) {
+      synced = await saveSettingsToShared();
+    }
+
+    // 4. Возвращаемся в режим просмотра
+    mapEditMode = false;
+    setEditMode(false);
+    document.getElementById('btn-map-edit').hidden = false;
+    document.getElementById('btn-map-save').hidden = true;
+    document.getElementById('btn-map-reset').hidden = true;
+    document.getElementById('map-edit-hint').hidden = true;
+
+    // 5. Тост
+    if (settings.useSharedSettings) {
+      toast(synced
+        ? 'Позиции маркеров сохранены и синхронизированы с союзом'
+        : 'Сохранено локально (ошибка синхронизации)');
+    } else {
+      toast('Позиции маркеров сохранены локально');
+    }
+  } catch (e) {
+    console.error('Ошибка сохранения карты:', e);
+    toast('Ошибка сохранения: ' + (e?.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
   }
-  toast('Расположение маркеров сохранено');
-  mapEditMode = false;
-  setEditMode(false);
-  document.getElementById('btn-map-edit').hidden = false;
-  document.getElementById('btn-map-save').hidden = true;
-  document.getElementById('btn-map-reset').hidden = true;
-  document.getElementById('map-edit-hint').hidden = true;
 };
 
 document.getElementById('btn-map-reset').onclick = () => {
