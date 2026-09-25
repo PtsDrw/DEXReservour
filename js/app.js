@@ -7,6 +7,11 @@ import {
   renderParticipants, renderBuildings, renderAllianceManageList, escapeHtml
 } from './ui.js';
 import { initDnD, setDnDConfig } from './dnd.js';
+import {
+  renderMap, setEditMode, resetPositions, getPositions,
+  DEFAULT_POSITIONS, DEFAULT_BARREL_ZONES
+} from './map.js';
+import { exportMapAsJpg } from './map-export.js';
 
 // ---------- Настройки ----------
 const SETTINGS_KEY = 'raid_planner_settings_v1';
@@ -17,6 +22,7 @@ const DEFAULT_SETTINGS = {
   pilotCount: 3,
   barrelCount: 6,
   useSharedSettings: false,
+  mapPositions: null,
 
   openMinutes: {
     wp1: 0, wp2: 0, wp3: 0, wp4: 0,
@@ -126,7 +132,8 @@ function loadSettings() {
           ? saved.autoFlights.rules
           : structuredClone(DEFAULT_SETTINGS.autoFlights.rules)
       },
-      useSharedSettings: !!(saved.useSharedSettings)
+      useSharedSettings: !!(saved.useSharedSettings),
+      mapPositions: saved.mapPositions || null
     };
   } catch (e) {
     return structuredClone(DEFAULT_SETTINGS);
@@ -1147,6 +1154,158 @@ document.getElementById('inp-settings-import').onchange = (e) => {
   };
   reader.readAsText(file);
 };
+
+// ---------- Карта ----------
+let mapEditMode = false;
+
+function openMap() {
+  mapEditMode = false;
+  document.getElementById('btn-map-edit').hidden = false;
+  document.getElementById('btn-map-save').hidden = true;
+  document.getElementById('btn-map-reset').hidden = true;
+  document.getElementById('map-edit-hint').hidden = true;
+  document.querySelectorAll('.map-tooltip').forEach(t => t.remove());
+
+  openModal('modal-map');
+  requestAnimationFrame(() => {
+    renderMap({
+      allocation: state.allocation,
+      participants: state.participants,
+      settings,
+      onMarkerClick: (building, players) => {
+        showMapTooltip(building, players);
+      }
+    });
+  });
+}
+
+document.getElementById('btn-map').onclick = openMap;
+
+document.getElementById('btn-map-edit').onclick = () => {
+  mapEditMode = true;
+  setEditMode(true);
+  document.getElementById('btn-map-edit').hidden = true;
+  document.getElementById('btn-map-save').hidden = false;
+  document.getElementById('btn-map-reset').hidden = false;
+  document.getElementById('map-edit-hint').hidden = false;
+  document.querySelectorAll('.map-tooltip').forEach(t => t.remove());
+};
+
+document.getElementById('btn-map-save').onclick = () => {
+  const positions = getPositions();
+  settings.mapPositions = positions;
+  saveSettingsLocal();
+  if (settings.useSharedSettings) {
+    saveSettingsToShared();
+  }
+  toast('Расположение маркеров сохранено');
+  mapEditMode = false;
+  setEditMode(false);
+  document.getElementById('btn-map-edit').hidden = false;
+  document.getElementById('btn-map-save').hidden = true;
+  document.getElementById('btn-map-reset').hidden = true;
+  document.getElementById('map-edit-hint').hidden = true;
+};
+
+document.getElementById('btn-map-reset').onclick = () => {
+  if (!confirm('Сбросить позиции всех маркеров к стандартным?')) return;
+  resetPositions();
+  toast('Позиции сброшены (не забудьте сохранить)');
+};
+
+// ---------- Скачивание карты в JPG ----------
+document.getElementById('btn-map-download').onclick = async () => {
+  const btn = document.getElementById('btn-map-download');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span class="btn-label">Готовим…</span>';
+
+  try {
+    const positions = getPositions();
+
+    const finalPositions = {};
+    BUILDINGS.forEach(b => {
+      finalPositions[b.id] = positions[b.id] || DEFAULT_POSITIONS[b.id];
+    });
+
+    const barrelZones = Array.isArray(positions.__barrels) && positions.__barrels.length
+      ? positions.__barrels
+      : DEFAULT_BARREL_ZONES;
+
+    await exportMapAsJpg({
+      positions: finalPositions,
+      barrelZones,
+      allocation: state.allocation,
+      participants: state.participants,
+      settings,
+      filename: `raid-map-${new Date().toISOString().slice(0, 10)}.jpg`
+    });
+
+    toast('Карта сохранена в JPG');
+  } catch (e) {
+    console.error('Ошибка экспорта карты:', e);
+    toast('Ошибка: ' + (e?.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+};
+
+function showMapTooltip(building, players) {
+  const wrap = document.getElementById('map-wrap');
+  document.querySelectorAll('.map-tooltip').forEach(t => t.remove());
+
+  const tt = document.createElement('div');
+  tt.className = 'map-tooltip';
+
+  const list = players.length
+    ? players.map((p, i) => {
+        const pilot = (p.player.roles || []).includes('pilot') ? ' ✈️' : '';
+        const barrel = (p.player.roles || []).includes('barrel') ? ' 🛢️' : '';
+        return `<div class="map-tooltip__row">
+          <span>${i + 1}. ${escapeHtml(p.player.nick)}${pilot}${barrel}</span>
+          <b>${(p.player.power || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</b>
+        </div>`;
+      }).join('')
+    : '<div class="map-tooltip__empty">Никого нет на точке</div>';
+
+  const flights = [];
+  players.forEach(p => {
+    (p.player.flights || []).forEach(f => {
+      const target = BUILDINGS.find(x => x.id === f.toBuildingId);
+      if (target) flights.push(`${p.player.nick} → ${target.name} (${f.atMinute} мин)`);
+    });
+  });
+
+  tt.innerHTML = `
+    <div class="map-tooltip__head">
+      <span>${escapeHtml(building.name)}</span>
+      <button class="icon-btn map-tooltip__close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="map-tooltip__list">${list}</div>
+    ${flights.length ? `
+      <div class="map-tooltip__flights">
+        <div class="map-tooltip__flights-title">Перелёты:</div>
+        ${flights.map(f => `<div>${escapeHtml(f)}</div>`).join('')}
+      </div>
+    ` : ''}
+  `;
+
+  wrap.appendChild(tt);
+  tt.querySelector('.map-tooltip__close').onclick = () => tt.remove();
+}
+
+document.getElementById('modal-map').addEventListener('click', e => {
+  if (e.target.closest('.modal__overlay') || e.target.closest('[data-close]')) {
+    document.querySelectorAll('.map-tooltip').forEach(t => t.remove());
+    if (mapEditMode) {
+      if (confirm('Выйти без сохранения изменений расположения?')) {
+        mapEditMode = false;
+        setEditMode(false);
+      }
+    }
+  }
+});
 
 // ---------- Старт ----------
 init().catch(err => {

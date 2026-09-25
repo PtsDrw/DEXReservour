@@ -10,13 +10,19 @@
 </head>
 <body>
 
-  <header class="top-bar">
+    <header class="top-bar">
     <div class="top-bar__left">
-      <button class="btn btn--ghost" id="btn-alliance">
-        <i class="fa-solid fa-users"></i> Союз
+      <button class="btn btn--ghost" id="btn-alliance" title="Союз">
+        <i class="fa-solid fa-users"></i>
+        <span class="btn-label">Союз</span>
       </button>
-      <button class="btn btn--ghost" id="btn-history">
-        <i class="fa-solid fa-clock-rotate-left"></i> История
+      <button class="btn btn--ghost" id="btn-history" title="История">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span class="btn-label">История</span>
+      </button>
+      <button class="btn btn--ghost" id="btn-map" title="Карта">
+        <i class="fa-solid fa-map"></i>
+        <span class="btn-label">Карта</span>
       </button>
     </div>
     <div class="top-bar__right">
@@ -141,6 +147,43 @@
           <input type="file" id="inp-history-import" accept=".json,application/json" hidden />
         </div>
         <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-map" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content modal__content--full">
+      <div class="modal__header">
+        <h4>Карта расстановки</h4>
+                <div class="map-header-actions">
+                            <button class="btn btn--ghost" id="btn-map-download" title="Скачать карту в JPG">
+            <i class="fa-solid fa-download"></i>
+            <span class="btn-label">Скачать JPG</span>
+          </button>
+          <button class="btn btn--ghost" id="btn-map-edit" title="Разместить маркеры">
+            <i class="fa-solid fa-pen"></i>
+            <span class="btn-label">Разместить маркеры</span>
+          </button>
+          <button class="btn btn--ghost" id="btn-map-reset" title="Сбросить к стандартным" hidden>
+            <i class="fa-solid fa-rotate-left"></i>
+            <span class="btn-label">Сбросить</span>
+          </button>
+          <button class="btn btn--success" id="btn-map-save" hidden>
+            <i class="fa-solid fa-check"></i>
+            <span class="btn-label">Сохранить</span>
+          </button>
+          <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="modal__body modal__body--map">
+        <p class="map-edit-hint" id="map-edit-hint" hidden>
+          <i class="fa-solid fa-hand-pointer"></i>
+          Перетащите маркеры на нужные позиции. Изменения вступят в силу после нажатия «Сохранить».
+        </p>
+        <div class="map-wrap" id="map-wrap">
+          <svg class="map-svg" id="map-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
       </div>
     </div>
   </div>
