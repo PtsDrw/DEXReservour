@@ -1,5 +1,7 @@
 import { getMembers, addMember, updateMember, deleteMember,
-         getHistory, saveHistory, deleteHistory } from './storage.js';
+         getHistory, saveHistory, deleteHistory,
+         getSharedSettings, saveSharedSettings,
+         bulkSaveHistory } from './storage.js';
 import { BUILDINGS, allocatePlayers } from './allocator.js';
 import {
   renderParticipants, renderBuildings, renderAllianceManageList, escapeHtml
@@ -14,6 +16,7 @@ const DEFAULT_SETTINGS = {
   scrollZone: 100,
   pilotCount: 3,
   barrelCount: 6,
+  useSharedSettings: false,
 
   openMinutes: {
     wp1: 0, wp2: 0, wp3: 0, wp4: 0,
@@ -49,6 +52,58 @@ const DEFAULT_SETTINGS = {
       { from: 'tc1', to: 'center', limit: 2, enabled: true },
       { from: 'tc2', to: 'center', limit: 2, enabled: true }
     ]
+  },
+
+  presets: {
+    standard: {
+      name: 'Стандарт',
+      description: 'Летчики на центр, бочки на слабых точках',
+      config: {
+        pilotCount: 3,
+        barrelCount: 6,
+        autoFlights: {
+          enabled: false,
+          rules: [
+            { from: 'wp1', to: 'center', limit: 2, enabled: true },
+            { from: 'wp2', to: 'center', limit: 2, enabled: true },
+            { from: 'wp3', to: 'center', limit: 2, enabled: true },
+            { from: 'wp4', to: 'center', limit: 2, enabled: true },
+            { from: 'tc1', to: 'center', limit: 2, enabled: true },
+            { from: 'tc2', to: 'center', limit: 2, enabled: true }
+          ]
+        }
+      }
+    },
+    aggressive: {
+      name: 'Агрессивный старт',
+      description: 'Забираем поздние точки перелётами, максимум игроков на ключевых',
+      config: {
+        pilotCount: 3,
+        barrelCount: 4,
+        autoFlights: {
+          enabled: true,
+          rules: [
+            { from: 'any', to: 'milfac', limit: 2, enabled: true },
+            { from: 'any', to: 'dev', limit: 2, enabled: true },
+            { from: 'any', to: 'center', limit: 3, enabled: true }
+          ]
+        }
+      }
+    },
+    center_max: {
+      name: 'Максимум на центр',
+      description: 'Как можно больше игроков на центральный резервуар',
+      config: {
+        pilotCount: 5,
+        barrelCount: 4,
+        autoFlights: {
+          enabled: true,
+          rules: [
+            { from: 'any', to: 'center', limit: 5, enabled: true }
+          ]
+        }
+      }
+    }
   }
 };
 
@@ -70,15 +125,23 @@ function loadSettings() {
         rules: saved.autoFlights?.rules?.length
           ? saved.autoFlights.rules
           : structuredClone(DEFAULT_SETTINGS.autoFlights.rules)
-      }
+      },
+      useSharedSettings: !!(saved.useSharedSettings)
     };
   } catch (e) {
     return structuredClone(DEFAULT_SETTINGS);
   }
 }
 
-function saveSettings() {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+function saveSettingsLocal() {
+  const { presets, ...clean } = settings;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(clean));
+}
+
+async function saveSettingsToShared() {
+  if (!settings.useSharedSettings) return false;
+  const { presets, ...clean } = settings;
+  return await saveSharedSettings(clean);
 }
 
 // ---------- Состояние ----------
@@ -120,7 +183,13 @@ function clearPlayerFromAllocation(id) {
 
 function refresh() {
   renderParticipants(state.participants, state.allocation, state.hidePlaced);
-  renderBuildings(state.allocation, state.participants, state.buildingsFilter, settings.openMinutes);
+  renderBuildings(
+    state.allocation,
+    state.participants,
+    state.buildingsFilter,
+    settings.openMinutes,
+    settings.minPlayers
+  );
   updateTogglePlacedBtn();
 }
 
@@ -180,6 +249,18 @@ window.__toast = toast;
 
 // ---------- Инициализация ----------
 async function init() {
+  if (settings.useSharedSettings) {
+    const shared = await getSharedSettings();
+    if (shared) {
+      settings = {
+        ...structuredClone(DEFAULT_SETTINGS),
+        ...shared,
+        useSharedSettings: true
+      };
+      saveSettingsLocal();
+    }
+  }
+
   state.members = await getMembers();
 
   const draft = loadDraft();
@@ -197,11 +278,10 @@ async function init() {
   syncFilterButtons();
 
   initDnD({
-        onDropPlayer: (id, from, to) => {
+    onDropPlayer: (id, from, to) => {
       const player = getParticipant(id);
       if (!player) return;
 
-      // Убираем игрока со СТАРОЙ точки (не со всех)
       if (from !== 'pool' && from !== to) {
         if (state.allocation[from]) {
           state.allocation[from] = state.allocation[from].filter(p => p.id !== id);
@@ -209,11 +289,9 @@ async function init() {
       }
 
       if (to === 'pool') {
-        // В пул — убираем со ВСЕХ точек и снимаем перелёты
         clearPlayerFromAllocation(id);
         player.flights = [];
       } else {
-        // На точку — добавляем
         state.allocation[to] = state.allocation[to] || [];
         if (!state.allocation[to].find(p => p.id === id)) {
           state.allocation[to].push({
@@ -221,10 +299,6 @@ async function init() {
             isPilot: (player.roles || []).includes('pilot')
           });
         }
-
-        // Если у игрока есть перелёты, проверяем их актуальность
-        // (например, если его перетащили на точку, которая уже была целью перелёта —
-        //  этот перелёт можно удалить, чтобы не дублировать)
         player.flights = (player.flights || []).filter(f => f.toBuildingId !== to);
       }
 
@@ -335,7 +409,13 @@ async function init() {
     }
 
     saveDraft();
-    renderBuildings(state.allocation, state.participants, state.buildingsFilter, settings.openMinutes);
+    renderBuildings(
+      state.allocation,
+      state.participants,
+      state.buildingsFilter,
+      settings.openMinutes,
+      settings.minPlayers
+    );
   };
 
   window.__onAddFlight = (playerId, toBuildingId) => {
@@ -362,7 +442,6 @@ async function init() {
       atMinute: target ? (settings.openMinutes?.[target.id] ?? target.openAt ?? 0) : 0
     });
 
-    // Дублируем игрока на целевую точку
     state.allocation[toBuildingId] = state.allocation[toBuildingId] || [];
     if (!state.allocation[toBuildingId].find(x => x.id === playerId)) {
       state.allocation[toBuildingId].push({
@@ -387,6 +466,71 @@ async function init() {
     saveDraft();
     refresh();
   };
+
+  window.__onToggleRole = (id, role) => {
+    const player = getParticipant(id);
+    if (!player) return;
+    player.roles = player.roles || [];
+    const has = player.roles.includes(role);
+    if (has) {
+      player.roles = player.roles.filter(r => r !== role);
+    } else {
+      if (role === 'pilot') player.roles = player.roles.filter(r => r !== 'barrel');
+      if (role === 'barrel') player.roles = player.roles.filter(r => r !== 'pilot');
+      player.roles.push(role);
+    }
+    Object.values(state.allocation).forEach(arr => {
+      arr.forEach(p => {
+        if (p.id === id) p.isPilot = (player.roles || []).includes('pilot');
+      });
+    });
+    saveDraft();
+    refresh();
+  };
+
+  window.__onSendToBuilding = (playerId, toBuildingId) => {
+    const player = getParticipant(playerId);
+    if (!player) return;
+
+    clearPlayerFromAllocation(playerId);
+
+    state.allocation[toBuildingId] = state.allocation[toBuildingId] || [];
+    if (!state.allocation[toBuildingId].find(x => x.id === playerId)) {
+      state.allocation[toBuildingId].push({
+        ...player,
+        isPilot: (player.roles || []).includes('pilot')
+      });
+    }
+
+    saveDraft();
+    refresh();
+    const target = BUILDINGS.find(b => b.id === toBuildingId);
+    toast(`Отправлен на ${target?.name || toBuildingId}`);
+  };
+
+  window.__onMoveToBuilding = (playerId, fromBuildingId, toBuildingId) => {
+    const player = getParticipant(playerId);
+    if (!player) return;
+
+    if (fromBuildingId && state.allocation[fromBuildingId]) {
+      state.allocation[fromBuildingId] = state.allocation[fromBuildingId].filter(x => x.id !== playerId);
+    }
+
+    state.allocation[toBuildingId] = state.allocation[toBuildingId] || [];
+    if (!state.allocation[toBuildingId].find(x => x.id === playerId)) {
+      state.allocation[toBuildingId].push({
+        ...player,
+        isPilot: (player.roles || []).includes('pilot')
+      });
+    }
+
+    player.flights = (player.flights || []).filter(f => f.toBuildingId !== toBuildingId);
+
+    saveDraft();
+    refresh();
+    const target = BUILDINGS.find(b => b.id === toBuildingId);
+    toast(`Перемещён на ${target?.name || toBuildingId}`);
+  };
 }
 
 // ---------- Модалки ----------
@@ -408,13 +552,11 @@ function updateAddCounter() {
   if (el) el.textContent = `В составе события: ${state.participants.length}`;
 }
 
-
 async function renderAllianceModal() {
   state.members = await getMembers();
   const query = document.getElementById('alliance-search').value.trim();
   const lower = query.toLowerCase();
 
-  // Фильтруем по подстроке
   const filtered = query
     ? state.members.filter(m => m.nick.toLowerCase().includes(lower))
     : state.members;
@@ -476,7 +618,6 @@ async function renderAllianceModal() {
     }
   });
 
-  // Управление кнопкой «Создать» и подсказкой
   const createBtn = document.getElementById('btn-create-member');
   const hint = document.getElementById('search-hint');
 
@@ -530,7 +671,6 @@ document.getElementById('btn-create-member').onclick = async () => {
   const nick = input.value.trim();
   if (!nick) { toast('Введите ник'); return; }
 
-  // Проверяем, что такого нет (защита от гонки)
   const existing = state.members.find(m => m.nick.toLowerCase() === nick.toLowerCase());
   if (existing) {
     toast('Игрок с таким ником уже есть');
@@ -541,7 +681,6 @@ document.getElementById('btn-create-member').onclick = async () => {
   if (!member) { toast('Ошибка добавления'); return; }
   state.members.push(member);
 
-  // Сразу добавляем в состав события
   state.participants.push({
     id: member.id, nick: member.nick, power: 0,
     type: 'main', roles: []
@@ -554,36 +693,6 @@ document.getElementById('btn-create-member').onclick = async () => {
   refresh();
   toast(`${member.nick} добавлен`);
 };
-
-document.getElementById('btn-alliance-done').onclick = () => {
-  closeModal('modal-alliance');
-};
-
-// document.getElementById('btn-create-member').onclick = async () => {
-//   const input = document.getElementById('new-nick');
-//   const nick = input.value.trim();
-//   if (!nick) { toast('Введите ник'); return; }
-
-//   let member = state.members.find(m => m.nick.toLowerCase() === nick.toLowerCase());
-//   if (!member) {
-//     member = await addMember(nick, 0);
-//     if (!member) { toast('Ошибка добавления'); return; }
-//     state.members.push(member);
-//   }
-//   if (!addedIds().has(member.id)) {
-//     state.participants.push({
-//       id: member.id, nick: member.nick, power: member.power || 0,
-//       type: 'main', roles: []
-//     });
-//   }
-//   input.value = '';
-//   input.focus();
-//   saveDraft();
-//   await renderAllianceModal();
-//   refresh();
-//   toast(`${member.nick} добавлен`);
-// };
-
 
 document.getElementById('btn-alliance-done').onclick = () => {
   closeModal('modal-alliance');
@@ -603,7 +712,13 @@ document.getElementById('filter-bar').addEventListener('click', e => {
   state.buildingsFilter = btn.dataset.filter;
   localStorage.setItem('raid_buildings_filter', state.buildingsFilter);
   syncFilterButtons();
-  renderBuildings(state.allocation, state.participants, state.buildingsFilter, settings.openMinutes);
+  renderBuildings(
+    state.allocation,
+    state.participants,
+    state.buildingsFilter,
+    settings.openMinutes,
+    settings.minPlayers
+  );
 });
 
 // ---------- Автораспределение ----------
@@ -707,6 +822,56 @@ document.getElementById('btn-history').onclick = async () => {
   openModal('modal-history');
 };
 
+document.getElementById('btn-history-export').onclick = async () => {
+  const history = await getHistory();
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    count: history.length,
+    history
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `raid-planner-history-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`Экспортировано записей: ${history.length}`);
+};
+
+document.getElementById('btn-history-import').onclick = () => {
+  document.getElementById('inp-history-import').click();
+};
+
+document.getElementById('inp-history-import').onchange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const entries = Array.isArray(data) ? data : (data.history || []);
+      if (!entries.length) {
+        toast('Файл пуст или неверного формата');
+        return;
+      }
+      if (!confirm(`Импортировать ${entries.length} записей в историю?`)) return;
+      toast('Идёт импорт...');
+      const ids = await bulkSaveHistory(entries);
+      toast(`Импортировано: ${ids.length} из ${entries.length}`);
+      document.getElementById('btn-history').click();
+    } catch (err) {
+      console.error(err);
+      toast('Не удалось прочитать файл');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+};
+
 // ---------- Тема ----------
 document.getElementById('btn-theme').onclick = () => {
   const grid = document.getElementById('theme-grid');
@@ -755,7 +920,10 @@ function renderSettingsModal() {
   });
 
   document.getElementById('inp-auto-flights').checked = !!settings.autoFlights?.enabled;
+  document.getElementById('inp-shared-settings').checked = !!settings.useSharedSettings;
+
   renderFlightRules();
+  renderPresets();
 }
 
 function renderFlightRules() {
@@ -811,6 +979,50 @@ function renderFlightRules() {
   });
 }
 
+function renderPresets() {
+  const container = document.getElementById('settings-presets');
+  if (!container) return;
+  container.innerHTML = '';
+  const presets = DEFAULT_SETTINGS.presets;
+
+  Object.entries(presets).forEach(([key, preset]) => {
+    const card = document.createElement('div');
+    card.className = 'preset-card';
+    card.innerHTML = `
+      <div class="preset-card__title">${escapeHtml(preset.name)}</div>
+      <div class="preset-card__desc">${escapeHtml(preset.description)}</div>
+      <button class="btn btn--primary preset-card__apply" data-preset="${key}">
+        <i class="fa-solid fa-check"></i> Применить
+      </button>
+    `;
+    card.querySelector('.preset-card__apply').onclick = () => {
+      if (!confirm(`Применить пресет «${preset.name}»? Текущие настройки будут заменены.`)) return;
+      const cfg = preset.config || {};
+      settings = {
+        ...structuredClone(DEFAULT_SETTINGS),
+        ...settings,
+        ...cfg,
+        openMinutes: { ...DEFAULT_SETTINGS.openMinutes, ...(cfg.openMinutes || {}) },
+        priorities: { ...DEFAULT_SETTINGS.priorities, ...(cfg.priorities || {}) },
+        minPlayers: { ...DEFAULT_SETTINGS.minPlayers, ...(cfg.minPlayers || {}) },
+        autoFlights: {
+          enabled: !!(cfg.autoFlights?.enabled),
+          rules: cfg.autoFlights?.rules?.length
+            ? cfg.autoFlights.rules
+            : structuredClone(DEFAULT_SETTINGS.autoFlights.rules)
+        }
+      };
+      delete settings.presets;
+      saveSettingsLocal();
+      setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
+      renderSettingsModal();
+      refresh();
+      toast(`Пресет «${preset.name}» применён`);
+    };
+    container.appendChild(card);
+  });
+}
+
 document.getElementById('btn-settings').onclick = () => {
   renderSettingsModal();
   openModal('modal-settings');
@@ -823,13 +1035,14 @@ document.getElementById('inp-scroll-zone').oninput = e => {
   document.getElementById('lbl-scroll-zone').textContent = e.target.value;
 };
 
-document.getElementById('btn-settings-save').onclick = () => {
+document.getElementById('btn-settings-save').onclick = async () => {
   settings.scrollSpeed = Number(document.getElementById('inp-scroll-speed').value);
   settings.scrollZone = Number(document.getElementById('inp-scroll-zone').value);
   settings.pilotCount = Number(document.getElementById('inp-pilot-count').value);
   settings.barrelCount = Number(document.getElementById('inp-barrel-count').value);
   settings.autoFlights = settings.autoFlights || { enabled: false, rules: [] };
   settings.autoFlights.enabled = document.getElementById('inp-auto-flights').checked;
+  settings.useSharedSettings = document.getElementById('inp-shared-settings').checked;
 
   document.querySelectorAll('#settings-buildings .settings-row').forEach(row => {
     const sel = row.querySelector('select');
@@ -840,18 +1053,26 @@ document.getElementById('btn-settings-save').onclick = () => {
     settings.openMinutes[open.dataset.id] = Number(open.value);
   });
 
-  saveSettings();
+  saveSettingsLocal();
   setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
   closeModal('modal-settings');
-  toast('Настройки сохранены');
+  refresh();
+
+  if (settings.useSharedSettings) {
+    const ok = await saveSettingsToShared();
+    toast(ok ? 'Настройки синхронизированы с союзом' : 'Сохранено локально (ошибка отправки)');
+  } else {
+    toast('Настройки сохранены');
+  }
 };
 
 document.getElementById('btn-settings-reset').onclick = () => {
   if (!confirm('Сбросить все настройки к значениям по умолчанию?')) return;
   settings = structuredClone(DEFAULT_SETTINGS);
-  saveSettings();
+  saveSettingsLocal();
   setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
   renderSettingsModal();
+  refresh();
   toast('Сброшено');
 };
 
@@ -862,6 +1083,69 @@ document.getElementById('btn-add-flight-rule').onclick = () => {
     from: 'any', to: 'center', limit: 3, enabled: true
   });
   renderFlightRules();
+};
+
+// ---------- Экспорт / импорт настроек ----------
+document.getElementById('btn-settings-export').onclick = () => {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    settings
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `raid-planner-settings-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Настройки сохранены в файл');
+};
+
+document.getElementById('btn-settings-import').onclick = () => {
+  document.getElementById('inp-settings-import').click();
+};
+
+document.getElementById('inp-settings-import').onchange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const imported = data.settings || data;
+      if (!imported || typeof imported !== 'object') {
+        toast('Неверный формат файла');
+        return;
+      }
+      settings = {
+        ...structuredClone(DEFAULT_SETTINGS),
+        ...imported,
+        openMinutes: { ...DEFAULT_SETTINGS.openMinutes, ...(imported.openMinutes || {}) },
+        priorities: { ...DEFAULT_SETTINGS.priorities, ...(imported.priorities || {}) },
+        minPlayers: { ...DEFAULT_SETTINGS.minPlayers, ...(imported.minPlayers || {}) },
+        autoFlights: {
+          enabled: !!(imported.autoFlights?.enabled),
+          rules: imported.autoFlights?.rules?.length
+            ? imported.autoFlights.rules
+            : structuredClone(DEFAULT_SETTINGS.autoFlights.rules)
+        }
+      };
+      delete settings.presets;
+      saveSettingsLocal();
+      setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
+      renderSettingsModal();
+      refresh();
+      toast('Настройки загружены из файла');
+    } catch (err) {
+      console.error(err);
+      toast('Не удалось прочитать файл');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
 };
 
 // ---------- Старт ----------

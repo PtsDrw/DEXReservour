@@ -96,53 +96,18 @@ body {
   display: flex; align-items: center; gap: 6px;
 }
 
-/* ---------- Палитра ролей ---------- */
-.role-palette {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  padding: 14px 16px;
-  background: var(--bg-elev);
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  width: calc(100vw / 3);
-  max-width: 100%;
-  align-self: flex-start;
-  box-sizing: border-box;
-}
-.role-chip {
-  aspect-ratio: 1 / 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: var(--bg-elev-2); border-radius: 14px;
-  font-size: 28px;
-  cursor: pointer; transition: all .15s; color: var(--accent);
-  border: 2px dashed var(--border);
-  position: relative;
-}
-.role-chip::after {
-  content: attr(data-label); font-size: 11px; color: var(--text-dim);
-  margin-top: 4px; font-weight: 600;
-}
-.role-chip:hover { border-color: var(--accent); transform: scale(1.05); }
-.role-chip.drop-target {
-  border-color: var(--success); border-style: solid;
-  background: rgba(16,185,129,.15); transform: scale(1.1);
-}
-.role-chip.role-chip--clear { color: var(--danger); }
-.role-chip.role-chip--clear:hover { border-color: var(--danger); }
-
 /* ---------- Мини-блок игрока ---------- */
 .player-chip {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; background: var(--bg-elev-2);
   border-radius: 10px; border: 1px solid var(--border);
-  cursor: grab; transition: all .15s; user-select: none;
+  cursor: pointer; transition: all .15s; user-select: none;
   position: relative;
 }
 .player-chip:hover { border-color: var(--accent); }
 .player-chip.dragging { opacity: .4; }
 .player-chip.placed {
-  cursor: default;
+  cursor: pointer;
   opacity: .55;
   filter: grayscale(0.6);
   border-style: dashed;
@@ -188,24 +153,21 @@ body {
   box-sizing: border-box;
 }
 
-/* Вид БМ в таблице (клик-редактирование) */
-.player-chip__power-view {
-  width: 58px; padding: 4px 6px; border-radius: 6px;
-  background: var(--bg); color: var(--text);
-  border: 1px solid transparent;
-  font-size: 13px; text-align: right;
-  cursor: pointer; transition: all .15s;
-  box-sizing: border-box;
-  display: inline-block;
-}
-.player-chip__power-view:hover {
-  border-color: var(--accent);
-}
-.player-chip__power--inline {
-  width: 58px;
+/* Текст БМ в таблице */
+.player-chip__power-text {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: monospace;
+  text-align: right;
+  flex-shrink: 0;
 }
 
-/* Убираем спиннеры */
+/* Убираем спиннеры у number-инпутов */
 .player-chip__power::-webkit-outer-spin-button,
 .player-chip__power::-webkit-inner-spin-button,
 .alliance-item__power::-webkit-outer-spin-button,
@@ -248,52 +210,77 @@ body {
   font-family: monospace;
 }
 
-/* ---------- Перелёты ---------- */
-.chip-flight-btn {
-  display: inline-flex;
+/* ---------- Чип в таблице (2 строки) ---------- */
+.player-chip--placed {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 8px;
+  min-width: 160px;
+}
+.player-chip__row1 {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--bg-elev);
-  border: 2px solid var(--accent);
-  font-size: 16px;
-  cursor: grab;
-  user-select: none;
-  transition: all .15s;
-  color: var(--accent);
-  pointer-events: auto;
+  gap: 6px;
+  min-width: 0;
+}
+.player-chip__row2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.player-chip__row2 .building-card__pilot-note {
+  margin-top: 0;
+  white-space: nowrap;
+}
+.player-chip__row1 .building-card__remove {
+  position: static;
+  display: flex;
   flex-shrink: 0;
+  margin-left: 2px;
 }
-.chip-flight-btn:hover {
-  background: var(--accent);
-  color: #fff;
-  transform: scale(1.08);
-}
-.chip-flight-btn:active { cursor: grabbing; }
+.player-chip:hover .building-card__remove { display: flex; }
 
+/* Метки перелётов */
 .building-card__flight-note {
   color: var(--accent);
   background: rgba(59,130,246,.12);
 }
 .building-card__flight-note i { margin-right: 3px; }
 
-.building-card__open {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 4px;
+/* ---------- Оверлей для меню (по центру экрана) ---------- */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity .18s;
+  padding: 20px;
 }
-.building-card__open i { font-size: 10px; }
-.building-card__open-label--early {
-  color: var(--success);
-  font-weight: 600;
+.menu-overlay--visible { opacity: 1; }
+.menu-overlay .flights-menu {
+  position: static;
+  max-height: 80vh;
+  overflow-y: auto;
+  min-width: 280px;
+  max-width: 420px;
+  width: 100%;
+  animation: menuSlideIn .2s ease-out;
+}
+@keyframes menuSlideIn {
+  from { opacity: 0; transform: scale(.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Меню перелётов */
+/* Меню действий (пул, таблицы, перелёты) */
 .flights-menu {
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -312,9 +299,7 @@ body {
   padding: 6px 8px; border-radius: 6px;
   font-size: 13px;
 }
-.flights-menu__item:hover {
-  background: var(--bg-elev-2);
-}
+.flights-menu__item:hover { background: var(--bg-elev-2); }
 .flights-menu__item i { color: var(--accent); }
 .flights-menu__item span {
   flex: 1;
@@ -324,8 +309,93 @@ body {
   background: transparent; border: none; color: var(--text-dim);
   cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px;
 }
-.flights-menu__del:hover {
-  background: var(--danger); color: #fff;
+.flights-menu__del:hover { background: var(--danger); color: #fff; }
+.flights-menu__section {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.flights-menu__section:last-child { border-bottom: none; }
+.flights-menu__title {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .5px;
+  padding: 4px 8px;
+}
+.flights-menu__add-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.flights-menu__add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all .15s;
+}
+.flights-menu__add:hover { background: var(--bg-elev-2); }
+.flights-menu__add i {
+  color: var(--accent);
+  font-size: 11px;
+  width: 14px;
+}
+.flights-menu__add--danger { color: var(--danger); }
+.flights-menu__add--danger i { color: var(--danger); }
+.flights-menu__add--danger:hover { background: rgba(239,68,68,.15); }
+
+/* Роли в меню */
+.flights-menu__role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.flights-menu__role {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all .15s;
+}
+.flights-menu__role:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--accent);
+}
+.flights-menu__role i {
+  color: var(--accent);
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+}
+.flights-menu__role.active {
+  background: rgba(59,130,246,.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.flights-menu__role.active i { color: var(--accent); }
+.flights-menu__check {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent);
 }
 
 /* ---------- Здания ---------- */
@@ -356,11 +426,46 @@ body {
 .meta-item i.gold { color: var(--gold); }
 .meta-item .bonus { color: var(--warning); font-weight: 600; }
 
+.building-card__open {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.building-card__open i { font-size: 10px; }
+.building-card__open-label--early {
+  color: var(--success);
+  font-weight: 600;
+}
+
 .building-card__sum {
   margin-left: auto; text-align: right;
   font-size: 12px; color: var(--text-dim);
 }
 .building-card__sum b { display: block; font-size: 16px; color: var(--text); }
+
+.building-card__warn {
+  display: inline-block;
+  background: rgba(239,68,68,.15);
+  color: var(--danger);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.building-card__warn i { margin-right: 4px; }
+
+.building-card--understaffed {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px rgba(239,68,68,.15);
+}
+.building-card--understaffed .building-card__icon {
+  background: rgba(239,68,68,.15);
+  color: var(--danger);
+}
 
 .building-card__actions {
   display: flex; gap: 4px; margin-left: 6px;
@@ -393,6 +498,7 @@ body {
   width: 18px; height: 18px; border-radius: 50%; border: none;
   background: var(--danger); color: #fff; font-size: 10px;
   cursor: pointer; display: none; align-items: center; justify-content: center;
+  z-index: 3;
 }
 .player-chip:hover .building-card__remove { display: flex; }
 
@@ -442,6 +548,19 @@ body {
 .field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row input[type="text"] { flex: 1; min-width: 140px; }
+
+#modal-alliance .row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+#modal-alliance .row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+#modal-alliance .row .btn {
+  white-space: nowrap;
+}
 
 /* ---------- Список союза ---------- */
 .alliance-list, #alliance-manage-list { display: flex; flex-direction: column; gap: 8px; }
@@ -591,6 +710,25 @@ input[type="range"] {
 }
 .flight-rule__del:hover { background: rgba(239,68,68,.15); }
 
+/* ---------- Пресеты ---------- */
+.settings-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.preset-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all .15s;
+}
+.preset-card:hover { border-color: var(--accent); }
+.preset-card__title { font-weight: 700; font-size: 14px; color: var(--text); }
+.preset-card__desc { font-size: 12px; color: var(--text-dim); line-height: 1.3; flex: 1; }
+.preset-card__apply { align-self: flex-start; padding: 6px 12px; font-size: 13px; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -600,93 +738,11 @@ input[type="range"] {
   max-width: 90vw; text-align: center;
 }
 
-/* ---------- Чип в таблице (2 строки) ---------- */
-.player-chip--placed {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  padding: 6px 8px;
-  min-width: 160px;
-}
-
-.player-chip__row1 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.player-chip__row2 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.player-chip__power-text {
-  margin-left: auto;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  font-family: monospace;
-  text-align: right;
-  flex-shrink: 0;
-}
-
-/* Строка 2 — метки не должны растягиваться */
-.player-chip__row2 .building-card__pilot-note {
-  margin-top: 0;
-  white-space: nowrap;
-}
-
-/* Крестик в первой строке — не отбирает место */
-.player-chip__row1 .building-card__remove {
-  position: static;
-  display: flex;
-  flex-shrink: 0;
-  margin-left: 2px;
-}
-.player-chip:hover .building-card__remove { display: flex; }
-
-/* Поле поиска + кнопка создания */
-#modal-alliance .row {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-#modal-alliance .row input[type="text"] {
-  flex: 1;
-  min-width: 0;
-}
-#modal-alliance .row .btn {
-  white-space: nowrap;
-}
-
-
-
 /* ---------- Мобильные ---------- */
 @media (max-width: 700px) {
   .hero__alliance { font-size: 26px; }
 
-  .role-palette {
-    width: 100%;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  .role-chip {
-    aspect-ratio: auto;
-    height: 64px;
-    flex-direction: row;
-    gap: 12px;
-    font-size: 22px;
-  }
-  .role-chip::after { margin-top: 0; font-size: 13px; }
-
+  /* Участники — сетка в 2 колонки */
   .participants__list {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -694,125 +750,131 @@ input[type="range"] {
     padding: 8px;
   }
 
-   .player-chip {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 6px 8px;
+  /* Чип игрока — 2 строки через grid */
+  .player-chip {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 3px 4px;
+    padding: 6px 6px;
     border-radius: 8px;
-    align-items: stretch;
-    min-width: 0;
-  }
-
-    .building-card__open {
-    font-size: 10px;
-    margin-top: 2px;
-  }
-  .building-card__open i { font-size: 9px; }
-
-  .player-chip__roles {
-    position: absolute;
-    top: -6px;
-    left: 4px;
-    background: var(--bg-elev);
-    border-radius: 6px;
-    padding: 1px 3px;
-    font-size: 11px;
-    border: 1px solid var(--border);
-    display: flex;
-    gap: 3px;
-    z-index: 2;
-  }
-  .player-chip__roles i { font-size: 10px; padding: 0; }
-
-  .chip-flight-btn {
-    position: absolute;
-    top: -6px;
-    left: 4px;
-    width: 20px; height: 20px;
-    font-size: 11px;
-    background: var(--bg-elev);
-    z-index: 3;
-  }
-
-    .player-chip__row1 {
-    display: flex;
     align-items: center;
-    gap: 4px;
     min-width: 0;
   }
-  .player-chip__row1 .player-chip__nick {
+
+  /* row1 и row2 — растворяются, их дети становятся прямыми грид-элементами */
+  .player-chip__row1,
+  .player-chip__row2 {
+    display: contents;
+  }
+
+  .player-chip.placed::after {
+    width: 14px;
+    height: 14px;
+    font-size: 9px;
+    top: -4px;
+    right: -4px;
+  }
+
+  /* Строка 1: этап + ник слева, крестик справа */
+    .player-chip__stage {
+    grid-column: 1 / 2;
+    grid-row: 1;
+    position: static;
+    font-size: 10px;
+    padding: 1px 4px;
+    justify-self: start;
+    align-self: center;
+    margin-right: 4px;
+  }
+  .player-chip__nick {
+    grid-column: 1 / 2;
+    grid-row: 1;
     font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
-    flex: 1;
+    /* Ник не должен перекрывать бейдж этапа — используем display: flex
+       через псевдо-контейнер невозможно, поэтому делаем так: */
+    padding-left: 0;
+    /* Сдвиг вправо, чтобы не залезал под stage */
+    margin-left: 30px;
   }
-  .player-chip__stage {
-    position: static;
-    font-size: 10px;
-    padding: 1px 4px;
+  .player-chip:not(.player-chip--placed) .player-chip__nick {
+    margin-left: 0;
   }
-  .player-chip__power-text {
+  .player-chip__remove {
+    grid-column: 2 / 3;
+    grid-row: 1;
+    justify-self: end;
+    width: 18px;
+    height: 18px;
     font-size: 11px;
-    padding: 1px 4px;
   }
-  .player-chip__row2 {
-    gap: 4px;
-  }
+
+    /* Строка 2: тип + роли упаковываются в один flex-контейнер */
   .player-chip__type {
+    grid-column: 1 / 2;
+    grid-row: 2;
     font-size: 9px;
-    padding: 1px 4px;
+    padding: 1px 5px;
+    justify-self: start;
+    align-self: center;
   }
   .player-chip__roles {
-    position: static;
+    /* Роль идёт сразу за типом, а не поверх */
+    grid-column: 1 / 2;
+    grid-row: 2;
+    justify-self: end;
+    align-self: center;
     background: transparent;
     border: none;
     padding: 0;
+    display: inline-flex;
+    gap: 3px;
+    margin-left: 0;
   }
-  .player-chip__roles i { font-size: 11px; padding: 0; }
+  .player-chip__roles i { font-size: 12px; padding: 0; }
 
-  .chip-flight-btn {
-    width: 26px;
-    height: 26px;
-    font-size: 13px;
+  .player-chip__power,
+  .player-chip__power-view,
+  .player-chip__power-text {
+    grid-column: 2 / 3;
+    grid-row: 2;
+    width: 52px;
+    padding: 2px 4px;
+    font-size: 11px;
+    justify-self: end;
+    text-align: right;
   }
 
+  /* Метки (перелёт, бочки) — на всю ширину третьей строкой */
   .player-chip__row2 .building-card__pilot-note {
+    grid-column: 1 / 3;
+    grid-row: 3;
+    justify-self: start;
     font-size: 9px;
     padding: 1px 4px;
+    margin-top: 2px;
   }
 
-
-  /* Когда у игрока есть роли — они не должны перекрывать стрелку */
-  .player-chip__roles ~ .chip-flight-btn {
-    left: auto;
-    right: 24px;
-  }
-
+  /* Чип в таблице на мобильном */
   .building-card__dropzone .player-chip {
     grid-template-columns: 1fr auto;
     padding: 5px 6px;
-  }
-  .building-card__pilot-note {
-    grid-column: 2 / 3;
-    grid-row: 2;
-    font-size: 9px;
-    padding: 1px 4px;
-    margin-top: 0;
   }
 
   /* Здания */
   .section { padding: 0 10px 24px; }
   .buildings { grid-template-columns: 1fr; gap: 10px; }
   .building-card { border-radius: 12px; }
-  .building-card__header {
-    padding: 10px; gap: 8px; flex-wrap: wrap;
-  }
+  .building-card__header { padding: 10px; gap: 8px; flex-wrap: wrap; }
   .building-card__icon { width: 38px; height: 38px; font-size: 18px; }
   .building-card__title { font-size: 13px; line-height: 1.2; }
   .building-card__meta { gap: 6px; font-size: 11px; }
+  .building-card__open { font-size: 10px; margin-top: 2px; }
+  .building-card__open i { font-size: 9px; }
   .building-card__sum {
     font-size: 11px; margin-left: 0; flex-basis: 100%;
     text-align: left; padding-top: 4px;
@@ -837,29 +899,37 @@ input[type="range"] {
     font-size: 12px;
   }
 
-  .player-chip.placed::after {
-    width: 14px;
-    height: 14px;
-    font-size: 9px;
-    top: -4px;
-    right: -4px;
-  }
+  .settings-presets { grid-template-columns: 1fr; }
 
+  #modal-alliance .row { flex-wrap: nowrap; }
+
+  /* Меню-оверлей */
+  .menu-overlay { padding: 16px; align-items: center; }
+  .menu-overlay .flights-menu {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    max-height: 75vh;
+  }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 400px) {
+  .player-chip__nick { font-size: 11px; }
+  .player-chip__type { font-size: 8px; padding: 1px 3px; }
+  .player-chip__power,
+  .player-chip__power-view,
+  .player-chip__power-text { width: 46px; font-size: 10px; }
+  .player-chip__stage { font-size: 9px; padding: 1px 3px; }
+  .player-chip__roles i { font-size: 11px; }
+  .player-chip { padding: 5px 6px; gap: 3px 4px; }
+  .participants__list { gap: 4px; padding: 6px; }
+}
+
+@media (max-width: 310px) {
+  /* Только на очень узких экранах — 1 колонка */
   .participants__list { grid-template-columns: 1fr; }
-  .player-chip { padding: 5px 8px; }
 }
 
 @media (max-width: 500px) {
-  .settings-row {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
-
-  #modal-alliance .row {
-    flex-wrap: nowrap;
-  }
+  .settings-row { grid-template-columns: 1fr 1fr 1fr; }
 }
-
-

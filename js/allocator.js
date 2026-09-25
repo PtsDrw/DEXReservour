@@ -1,83 +1,59 @@
-// ---------- Конфигурация зданий ----------
 export const BUILDINGS = [
-  {
-    id: 'wp1', name: 'Водоперерабатывающий завод 1',
+  { id: 'wp1', name: 'Водоперерабатывающий завод 1',
     icon: 'fa-industry', water: 600, first: 3000, openAt: 0,
     minPlayers: 2, maxPlayers: 4, priority: 4, category: 'key',
-    kind: 'main', weight: 600 * 10 + 3000
-  },
-  {
-    id: 'wp2', name: 'Водоперерабатывающий завод 2',
+    kind: 'main', weight: 600 * 10 + 3000 },
+  { id: 'wp2', name: 'Водоперерабатывающий завод 2',
     icon: 'fa-industry', water: 600, first: 3000, openAt: 0,
     minPlayers: 2, maxPlayers: 4, priority: 4, category: 'key',
-    kind: 'main', weight: 600 * 10 + 3000
-  },
-  {
-    id: 'wp3', name: 'Водоперерабатывающий завод 3',
+    kind: 'main', weight: 600 * 10 + 3000 },
+  { id: 'wp3', name: 'Водоперерабатывающий завод 3',
     icon: 'fa-industry', water: 600, first: 3000, openAt: 0,
     minPlayers: 2, maxPlayers: 4, priority: 4, category: 'key',
-    kind: 'main', weight: 600 * 10 + 3000
-  },
-  {
-    id: 'wp4', name: 'Водоперерабатывающий завод 4',
+    kind: 'main', weight: 600 * 10 + 3000 },
+  { id: 'wp4', name: 'Водоперерабатывающий завод 4',
     icon: 'fa-industry', water: 600, first: 3000, openAt: 0,
     minPlayers: 2, maxPlayers: 4, priority: 4, category: 'key',
-    kind: 'main', weight: 600 * 10 + 3000
-  },
-  {
-    id: 'tc1', name: 'Водоочистительный центр 1',
+    kind: 'main', weight: 600 * 10 + 3000 },
+  { id: 'tc1', name: 'Водоочистительный центр 1',
     icon: 'fa-filter', water: 1200, first: 6000, openAt: 0,
     minPlayers: 2, maxPlayers: 5, priority: 2, category: 'key',
-    kind: 'main', weight: 1200 * 10 + 6000
-  },
-  {
-    id: 'tc2', name: 'Водоочистительный центр 2',
+    kind: 'main', weight: 1200 * 10 + 6000 },
+  { id: 'tc2', name: 'Водоочистительный центр 2',
     icon: 'fa-filter', water: 1200, first: 6000, openAt: 0,
     minPlayers: 2, maxPlayers: 5, priority: 2, category: 'key',
-    kind: 'main', weight: 1200 * 10 + 6000
-  },
-  {
-    id: 'solar', name: 'Солнечная станция',
+    kind: 'main', weight: 1200 * 10 + 6000 },
+  { id: 'solar', name: 'Солнечная станция',
     icon: 'fa-solar-panel', water: 240, first: 1200, openAt: 0,
     minPlayers: 2, maxPlayers: 3, priority: 1, category: 'buff',
     kind: 'aux', weight: 240 * 10 + 1200,
-    bonus: { icon: 'fa-house', label: '-50% захват' }
-  },
-  {
-    id: 'helipad', name: 'Вертолетная площадка',
+    bonus: { icon: 'fa-house', label: '-50% захват' } },
+  { id: 'helipad', name: 'Вертолетная площадка',
     icon: 'fa-helicopter', water: 240, first: 1200, openAt: 0,
     minPlayers: 2, maxPlayers: 3, priority: 1, category: 'buff',
     kind: 'aux', weight: 240 * 10 + 1200,
-    bonus: { icon: 'fa-arrows-rotate', label: '-50% перезар.' }
-  },
-  {
-    id: 'milfac', name: 'Военный завод',
+    bonus: { icon: 'fa-arrows-rotate', label: '-50% перезар.' } },
+  { id: 'milfac', name: 'Военный завод',
     icon: 'fa-gears', water: 240, first: 1200, openAt: 10,
     minPlayers: 2, maxPlayers: 3, priority: 1, category: 'buff',
     kind: 'aux', weight: 240 * 10 + 1200,
-    bonus: { icon: 'fa-burst', label: '+20% урон' }
-  },
-  {
-    id: 'dev', name: 'Комплекс разработки',
+    bonus: { icon: 'fa-burst', label: '+20% урон' } },
+  { id: 'dev', name: 'Комплекс разработки',
     icon: 'fa-flask', water: 240, first: 1200, openAt: 10,
     minPlayers: 1, maxPlayers: 3, priority: 5, category: 'late',
     kind: 'aux', weight: 240 * 10 + 1200,
-    bonus: { icon: 'fa-biohazard', label: 'зараженные' }
-  },
-  {
-    id: 'center', name: 'Центральный резервуар',
+    bonus: { icon: 'fa-biohazard', label: 'зараженные' } },
+  { id: 'center', name: 'Центральный резервуар',
     icon: 'fa-water', water: 1800, first: 6000, openAt: 15,
     minPlayers: 3, maxPlayers: 3, priority: 0, category: 'center',
-    kind: 'main', weight: 1800 * 10 + 6000
-  }
+    kind: 'main', weight: 1800 * 10 + 6000 }
 ];
 
-// ---------- Основной алгоритм ----------
 export function allocatePlayers(players, settings) {
   const PILOT_COUNT = settings?.pilotCount ?? 3;
   const BARREL_COUNT = settings?.barrelCount ?? 6;
 
-    const CONFIG = BUILDINGS.map(b => {
+  const CONFIG = BUILDINGS.map(b => {
     const prio = settings?.priorities?.[b.id] || (b.priority <= 1 ? 'high' : b.priority <= 4 ? 'medium' : 'low');
     const min = settings?.minPlayers?.[b.id] ?? b.minPlayers;
     const openAt = settings?.openMinutes?.[b.id] ?? b.openAt ?? 0;
@@ -86,7 +62,6 @@ export function allocatePlayers(players, settings) {
       minPlayers: min,
       openAt,
       priority: prio === 'high' ? 0 : prio === 'low' ? 10 : 5,
-      // Точка поздняя, если открывается после старта И включены авто-перелёты
       isLate: openAt > 0 && settings?.autoFlights?.enabled
     };
   });
@@ -126,8 +101,6 @@ export function allocatePlayers(players, settings) {
   let remainingBarrels = copy.filter(p => barrelIds.has(p.id))
                              .sort((a, b) => (b.power || 0) - (a.power || 0));
 
-    // Поздние точки (кроме центра) исключаем из прямого распределения,
-  // если включены авто-перелёты. Игроки попадут туда только через перелёты.
   const nonCenter = CONFIG.filter(b => b.category !== 'center' && !b.isLate);
 
   const totalToDistribute = remainingNonBarrel.length + remainingBarrels.length;
@@ -229,12 +202,10 @@ export function allocatePlayers(players, settings) {
     overflow.push(remainingBarrels.shift());
   }
 
-  // Авто-перелёты
   if (settings?.autoFlights?.enabled && settings?.autoFlights?.rules?.length) {
     applyAutoFlights(allocation, CONFIG, copy, settings);
   }
 
-  // Дублируем игроков с перелётами на целевые точки
   copy.forEach(p => {
     (p.flights || []).forEach(f => {
       allocation[f.toBuildingId] = allocation[f.toBuildingId] || [];
@@ -252,16 +223,12 @@ export function allocatePlayers(players, settings) {
   };
 }
 
-// ---------- Авто-перелёты ----------
 function applyAutoFlights(allocation, config, allPlayers, settings) {
   const rules = settings?.autoFlights?.rules || [];
   if (rules.length === 0) return;
 
-  // Приоритет точки: high=0, medium=5, low=10 (меньше — важнее)
   const prioVal = (b) => b.priority;
 
-  // Сортируем правила: сначала на точки с высоким приоритетом,
-  // потом средним, потом низким. Внутри одного приоритета — по времени открытия.
   const sortedRules = [...rules]
     .filter(r => r.enabled)
     .sort((r1, r2) => {
@@ -274,32 +241,22 @@ function applyAutoFlights(allocation, config, allPlayers, settings) {
       return (t1.openAt || 0) - (t2.openAt || 0);
     });
 
-  // Считаем, сколько игроков «доступно» на каждой исходной точке
-  // с учётом minPlayers — не опускаем точку ниже минимума.
   const sourceStats = {};
   Object.entries(allocation).forEach(([bid, arr]) => {
     const building = config.find(b => b.id === bid);
     if (!building) return;
-      const eligible = arr.filter(p => {
+    const eligible = arr.filter(p => {
       const roles = p.roles || [];
-      // Только пилоты исключаются — они и так на центре.
-      // Бочки тоже могут перелетать, пока не ушли на бочки (30/40 мин).
       return !roles.includes('pilot');
     });
     sourceStats[bid] = {
       total: arr.length,
       eligible: eligible.length,
       minPlayers: building.minPlayers || 0,
-      // Сколько МОЖНО отправить = eligible - minPlayers (но не меньше 0)
-      // Если после отправки на точке останется < minPlayers, не отправляем.
-      // Если в точке не хватает и так, отправлять нельзя.
-      availableToSend: Math.max(0, eligible.length - Math.max(0, building.minPlayers)),
-      // Список игроков, которых можно отправить (сильнейшие первыми)
       pool: eligible.sort((a, b) => (b.power || 0) - (a.power || 0)).slice()
     };
   });
 
-  // Множество игроков, которые уже получили перелёт — исключаем их из дальнейших
   const alreadySent = new Set();
 
   sortedRules.forEach(rule => {
@@ -310,7 +267,6 @@ function applyAutoFlights(allocation, config, allPlayers, settings) {
     const target = config.find(b => b.id === to);
     if (!target) return;
 
-    // Собираем кандидатов
     let candidateSources;
     if (from === 'any') {
       candidateSources = Object.keys(sourceStats).filter(id => id !== to);
@@ -318,8 +274,6 @@ function applyAutoFlights(allocation, config, allPlayers, settings) {
       candidateSources = [from];
     }
 
-    // Сортируем источники по количеству доступных игроков (больше — раньше),
-    // но внутри — по силе игроков
     const candidates = [];
     candidateSources.forEach(sid => {
       if (!sourceStats[sid]) return;
@@ -330,7 +284,6 @@ function applyAutoFlights(allocation, config, allPlayers, settings) {
       });
     });
 
-    // Сортируем кандидатов по силе (сильнейшие первыми)
     candidates.sort((a, b) => (b.player.power || 0) - (a.player.power || 0));
 
     let sent = 0;
@@ -338,15 +291,12 @@ function applyAutoFlights(allocation, config, allPlayers, settings) {
       if (sent >= limit) break;
       if (alreadySent.has(c.player.id)) continue;
 
-      // Проверяем, что на исходной точке останется минимум
       const stats = sourceStats[c.fromId];
+      const keepGuard = (stats.minPlayers >= 1) ? Math.min(1, stats.minPlayers) : 0;
       const remainingEligible = stats.pool.filter(
         p => !alreadySent.has(p.id) && p.id !== c.player.id
       ).length;
-      if (remainingEligible < stats.minPlayers) {
-        // Нельзя отправлять — на точке останется меньше минимума
-        continue;
-      }
+      if (remainingEligible < keepGuard) continue;
 
       const p = allPlayers.find(x => x.id === c.player.id);
       if (!p) continue;
@@ -364,7 +314,6 @@ function applyAutoFlights(allocation, config, allPlayers, settings) {
   });
 }
 
-// ---------- Утилиты ----------
 function calcCapacity(totalPlayers, buildings) {
   const totalMin = buildings.reduce((s, b) => s + b.minPlayers, 0);
   const totalMax = buildings.reduce((s, b) => s + b.maxPlayers, 0);

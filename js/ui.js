@@ -1,5 +1,7 @@
 import { BUILDINGS } from './allocator.js';
 
+const IS_TOUCH_DEVICE = window.matchMedia('(pointer: coarse)').matches;
+
 // ---------- Участники ----------
 export function renderParticipants(players, allocation, hidePlaced = false) {
   const list = document.getElementById('participants-list');
@@ -25,17 +27,16 @@ export function renderParticipants(players, allocation, hidePlaced = false) {
   }
 }
 
-// Чип в пуле — с input для БМ
 export function makePlayerChip(player, placed = false, from = 'pool') {
   const chip = document.createElement('div');
   chip.className = 'player-chip' + (placed ? ' placed' : '');
-  chip.draggable = !placed;
+  chip.draggable = !placed && !IS_TOUCH_DEVICE;
   chip.dataset.id = player.id;
   chip.dataset.from = from;
 
   const roles = (player.roles || []).map(r => {
-    if (r === 'barrel') return '<i class="fa-solid fa-bottle-water" data-role="barrel" title="Бочка (клик — снять)"></i>';
-    if (r === 'pilot') return '<i class="fa-solid fa-jet-fighter" data-role="pilot" title="Летчик (клик — снять)"></i>';
+    if (r === 'barrel') return '<i class="fa-solid fa-bottle-water" data-role="barrel" title="Бочка"></i>';
+    if (r === 'pilot') return '<i class="fa-solid fa-jet-fighter" data-role="pilot" title="Летчик"></i>';
     return '';
   }).join('');
 
@@ -90,16 +91,23 @@ export function makePlayerChip(player, placed = false, from = 'pool') {
     });
   });
 
+  if (!placed) {
+    chip.addEventListener('click', e => {
+      if (e.target.closest('input, button, .player-chip__type, .player-chip__roles i')) return;
+      openPoolChipMenu(chip, player);
+    });
+  }
+
   return chip;
 }
 
-// Чип в таблице — БМ в виде текста, клик → редактирование
+// ---------- Чип в таблице ----------
 export function makePlacedChip(player, from) {
   const chip = document.createElement('div');
   chip.className = 'player-chip player-chip--placed';
   chip.dataset.id = player.id;
   chip.dataset.from = from;
-  chip.draggable = true;
+  chip.draggable = !IS_TOUCH_DEVICE;
 
   const roles = (player.roles || []).map(r => {
     if (r === 'barrel') return '<i class="fa-solid fa-bottle-water" title="Бочка"></i>';
@@ -110,11 +118,6 @@ export function makePlacedChip(player, from) {
   const stage = computeStage(player, from);
   const flights = (player.flights || []);
 
-  const maxStage = flights.length === 0 ? 1 : flights.length + 1;
-  const isFinalStage = flights.length > 0 && stage === maxStage;
-  const showFlightBtn = !isFinalStage;
-
-  // Метки следующих перелётов
   const flightNotes = [];
   flights.forEach(f => {
     const target = BUILDINGS.find(x => x.id === f.toBuildingId);
@@ -127,9 +130,6 @@ export function makePlacedChip(player, from) {
     );
   });
 
-  // Метки ролей
-  // «Центр» автоматически НЕ ставим — только реальные перелёты дают метку цели.
-  // Роль «Бочка» — метка остаётся, потому что бочки по механике игры идут на бочки в 30/40 мин.
   const roleNotes = [];
   if ((player.roles || []).includes('barrel')) {
     roleNotes.push('<span class="building-card__pilot-note building-card__barrel-note">Бочки</span>');
@@ -149,9 +149,8 @@ export function makePlacedChip(player, from) {
         ${player.type === 'main' ? 'О' : 'Р'}
       </span>
       <span class="player-chip__roles">${roles}</span>
-      ${showFlightBtn ? '<span class="chip-flight-btn" draggable="true" data-action="flight" title="Перетащите на точку — игрок полетит туда. Клик — список перелётов">📤</span>' : ''}
-      ${roleNotes.join('')}
       ${flightNotes.join('')}
+      ${roleNotes.join('')}
     </div>
   `;
 
@@ -160,19 +159,16 @@ export function makePlacedChip(player, from) {
     chip.dispatchEvent(new CustomEvent('chip:toggle-type', { bubbles: true, detail: { id: player.id } }));
   });
 
-  const flightBtn = chip.querySelector('.chip-flight-btn');
-  if (flightBtn) {
-    flightBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      openFlightsMenu(chip, player, from);
-    });
-  }
-
   chip.querySelector('.building-card__remove').addEventListener('click', e => {
     e.stopPropagation();
     chip.dispatchEvent(new CustomEvent('chip:remove-from-building', {
       bubbles: true, detail: { id: player.id, buildingId: from }
     }));
+  });
+
+  chip.addEventListener('click', e => {
+    if (e.target.closest('input, button, .player-chip__type, .player-chip__roles i, .building-card__remove')) return;
+    openPlacedChipMenu(chip, player, from);
   });
 
   return chip;
@@ -202,101 +198,231 @@ function formatPower(p) {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
 
-// function openPowerEditor(viewEl, chip, player) {
-//   const input = document.createElement('input');
-//   input.className = 'player-chip__power player-chip__power--inline';
-//   input.type = 'number';
-//   input.step = '0.01';
-//   input.min = '0';
-//   input.value = player.power || 0;
+// ---------- Оверлей / центр экрана ----------
+function positionMenu(menu, anchor) {
+  document.querySelectorAll('.menu-overlay').forEach(m => m.remove());
 
-//   input.addEventListener('click', ev => ev.stopPropagation());
-//   input.addEventListener('focus', () => { if (input.value === '0') input.value = ''; });
-//   input.addEventListener('blur', () => {
-//     const val = Number(input.value) || 0;
-//     player.power = val;
-//     chip.dispatchEvent(new CustomEvent('chip:power-changed', {
-//       bubbles: true, detail: { id: player.id, power: val }
-//     }));
-//     const view = document.createElement('span');
-//     view.className = 'player-chip__power-view';
-//     view.title = 'Клик — редактировать';
-//     view.textContent = formatPower(val);
-//     view.addEventListener('click', e => {
-//       e.stopPropagation();
-//       openPowerEditor(view, chip, player);
-//     });
-//     input.replaceWith(view);
-//   });
-//   input.addEventListener('keydown', ev => {
-//     if (ev.key === 'Enter') input.blur();
-//     if (ev.key === 'Escape') { input.value = player.power || 0; input.blur(); }
-//   });
+  const overlay = document.createElement('div');
+  overlay.className = 'menu-overlay';
+  overlay.appendChild(menu);
+  document.body.appendChild(overlay);
 
-//   viewEl.replaceWith(input);
-//   input.focus();
-//   input.select();
-// }
+  requestAnimationFrame(() => overlay.classList.add('menu-overlay--visible'));
+}
 
-// ---------- Меню перелётов ----------
-function openFlightsMenu(chip, player, fromBuildingId) {
-  document.querySelectorAll('.flights-menu').forEach(m => m.remove());
+function closeMenu(overlay) {
+  if (!overlay) return;
+  overlay.classList.remove('menu-overlay--visible');
+  setTimeout(() => {
+    if (overlay.parentElement) overlay.remove();
+  }, 180);
+}
+
+function bindMenuClose(menu) {
+  const overlay = menu.parentElement;
+  if (!overlay) return;
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeMenu(overlay);
+  });
+
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeMenu(overlay);
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+}
+
+// ---------- Меню для игрока в пуле ----------
+function openPoolChipMenu(chip, player) {
+  document.querySelectorAll('.menu-overlay').forEach(m => m.remove());
 
   const menu = document.createElement('div');
   menu.className = 'flights-menu';
 
-  const flights = player.flights || [];
+  const roles = player.roles || [];
+  const hasPilot = roles.includes('pilot');
+  const hasBarrel = roles.includes('barrel');
 
-  if (flights.length === 0) {
-    menu.innerHTML = `<div class="flights-menu__empty">Нет перелётов. Перетащите 📤 на другую точку.</div>`;
-  } else {
-    const sorted = [...flights].sort((a, b) => (a.atMinute || 0) - (b.atMinute || 0));
-    menu.innerHTML = sorted.map((f, i) => {
-      const target = BUILDINGS.find(x => x.id === f.toBuildingId);
-      const name = target ? target.name : f.toBuildingId;
-      const stage = i + 2;
-      return `
-        <div class="flights-menu__item">
-          <i class="fa-solid fa-share"></i>
-          <span>(${stage}) ${escapeHtml(name)}${f.atMinute ? ` — ${f.atMinute} мин` : ''}</span>
-          <button class="flights-menu__del" data-target="${f.toBuildingId}" title="Удалить перелёт">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-      `;
-    }).join('');
-  }
+  const buttons = BUILDINGS.map(b => `
+    <button class="flights-menu__add" data-target="${b.id}">
+      <i class="fa-solid fa-location-dot"></i>
+      ${escapeHtml(b.name)}
+    </button>
+  `).join('');
 
-  const rect = chip.getBoundingClientRect();
-  menu.style.position = 'fixed';
-  menu.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
-  menu.style.top = (rect.bottom + 6) + 'px';
-  menu.style.zIndex = '300';
-  document.body.appendChild(menu);
+  menu.innerHTML = `
+    <div class="flights-menu__section">
+      <div class="flights-menu__title">Роли</div>
+      <div class="flights-menu__role-list">
+        <button class="flights-menu__role ${hasPilot ? 'active' : ''}" data-role="pilot">
+          <i class="fa-solid fa-jet-fighter"></i>
+          Летчик
+          <span class="flights-menu__check">${hasPilot ? '✓' : ''}</span>
+        </button>
+        <button class="flights-menu__role ${hasBarrel ? 'active' : ''}" data-role="barrel">
+          <i class="fa-solid fa-bottle-water"></i>
+          Бочка
+          <span class="flights-menu__check">${hasBarrel ? '✓' : ''}</span>
+        </button>
+      </div>
+    </div>
+    <div class="flights-menu__section">
+      <div class="flights-menu__title">Отправить на точку</div>
+      <div class="flights-menu__add-list">${buttons}</div>
+    </div>
+  `;
 
-  menu.querySelectorAll('.flights-menu__del').forEach(btn => {
+  positionMenu(menu, chip);
+
+  menu.querySelectorAll('[data-role]').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
-      const target = btn.dataset.target;
-      player.flights = (player.flights || []).filter(f => f.toBuildingId !== target);
-      menu.remove();
-      chip.dispatchEvent(new CustomEvent('chip:flights-changed', {
-        bubbles: true, detail: { id: player.id, removed: target }
-      }));
+      const role = btn.dataset.role;
+      const isActive = btn.classList.contains('active');
+      btn.classList.toggle('active', !isActive);
+      const check = btn.querySelector('.flights-menu__check');
+      if (check) check.textContent = !isActive ? '✓' : '';
+      if (typeof window.__onToggleRole === 'function') {
+        window.__onToggleRole(player.id, role);
+      }
     };
   });
 
-  const closeHandler = (e) => {
-    if (!menu.contains(e.target)) {
-      menu.remove();
-      document.removeEventListener('click', closeHandler, true);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', closeHandler, true), 0);
+  menu.querySelectorAll('.flights-menu__add').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const target = btn.dataset.target;
+      closeMenu(menu.parentElement);
+      if (typeof window.__onSendToBuilding === 'function') {
+        window.__onSendToBuilding(player.id, target);
+      }
+    };
+  });
+
+  bindMenuClose(menu);
+}
+
+// ---------- Меню для игрока в таблице ----------
+function openPlacedChipMenu(chip, player, fromBuildingId) {
+  document.querySelectorAll('.menu-overlay').forEach(m => m.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'flights-menu';
+
+  const roles = player.roles || [];
+  const hasPilot = roles.includes('pilot');
+  const hasBarrel = roles.includes('barrel');
+
+  const flights = player.flights || [];
+  const flightTargets = new Set(flights.map(f => f.toBuildingId));
+
+  const flightButtons = BUILDINGS
+    .filter(b => b.id !== fromBuildingId && !flightTargets.has(b.id))
+    .map(b => `
+      <button class="flights-menu__add" data-flight="${b.id}">
+        <i class="fa-solid fa-share"></i>
+        ${escapeHtml(b.name)}
+      </button>
+    `).join('');
+
+  const moveButtons = BUILDINGS
+    .filter(b => b.id !== fromBuildingId)
+    .map(b => `
+      <button class="flights-menu__add" data-move="${b.id}">
+        <i class="fa-solid fa-arrow-right-arrow-left"></i>
+        ${escapeHtml(b.name)}
+      </button>
+    `).join('');
+
+  menu.innerHTML = `
+    <div class="flights-menu__section">
+      <div class="flights-menu__title">Роли</div>
+      <div class="flights-menu__role-list">
+        <button class="flights-menu__role ${hasPilot ? 'active' : ''}" data-role="pilot">
+          <i class="fa-solid fa-jet-fighter"></i>
+          Летчик
+          <span class="flights-menu__check">${hasPilot ? '✓' : ''}</span>
+        </button>
+        <button class="flights-menu__role ${hasBarrel ? 'active' : ''}" data-role="barrel">
+          <i class="fa-solid fa-bottle-water"></i>
+          Бочка
+          <span class="flights-menu__check">${hasBarrel ? '✓' : ''}</span>
+        </button>
+      </div>
+    </div>
+    <div class="flights-menu__section">
+      <div class="flights-menu__title">Перелёт на точку (останется здесь)</div>
+      <div class="flights-menu__add-list">${flightButtons || '<div class="flights-menu__empty">Нет доступных точек</div>'}</div>
+    </div>
+    <div class="flights-menu__section">
+      <div class="flights-menu__title">Переместить на точку</div>
+      <div class="flights-menu__add-list">${moveButtons}</div>
+    </div>
+    <div class="flights-menu__section">
+      <button class="flights-menu__add flights-menu__add--danger" data-action="remove">
+        <i class="fa-solid fa-xmark"></i>
+        Убрать из точки
+      </button>
+    </div>
+  `;
+
+  positionMenu(menu, chip);
+
+  menu.querySelectorAll('[data-role]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const role = btn.dataset.role;
+      const isActive = btn.classList.contains('active');
+      btn.classList.toggle('active', !isActive);
+      const check = btn.querySelector('.flights-menu__check');
+      if (check) check.textContent = !isActive ? '✓' : '';
+      if (typeof window.__onToggleRole === 'function') {
+        window.__onToggleRole(player.id, role);
+      }
+    };
+  });
+
+  menu.querySelectorAll('[data-flight]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const target = btn.dataset.flight;
+      closeMenu(menu.parentElement);
+      if (typeof window.__onAddFlight === 'function') {
+        window.__onAddFlight(player.id, target);
+      }
+    };
+  });
+
+  menu.querySelectorAll('[data-move]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const target = btn.dataset.move;
+      closeMenu(menu.parentElement);
+      if (typeof window.__onMoveToBuilding === 'function') {
+        window.__onMoveToBuilding(player.id, fromBuildingId, target);
+      }
+    };
+  });
+
+  const removeBtn = menu.querySelector('[data-action="remove"]');
+  if (removeBtn) {
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      closeMenu(menu.parentElement);
+      chip.dispatchEvent(new CustomEvent('chip:remove-from-building', {
+        bubbles: true, detail: { id: player.id, buildingId: fromBuildingId }
+      }));
+    };
+  }
+
+  bindMenuClose(menu);
 }
 
 // ---------- Здания ----------
-export function renderBuildings(allocation, players, filter = 'all', openMinutes = {}) {
+export function renderBuildings(allocation, players, filter = 'all', openMinutes = {}, minPlayers = {}) {
   const container = document.getElementById('buildings');
   container.innerHTML = '';
 
@@ -321,6 +447,7 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
     card.dataset.buildingId = b.id;
 
     const openAt = openMinutes[b.id] ?? b.openAt ?? 0;
+    const minRequired = minPlayers[b.id] ?? b.minPlayers ?? 0;
 
     const onThisPoint = (allocation?.[b.id] || []).map(p => {
       const player = byId.get(p.id) || p;
@@ -342,6 +469,7 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
     finalList.sort((a, b2) => computeStage(a, b.id) - computeStage(b2, b.id));
 
     const sum = finalList.reduce((s, p) => s + (p.power || 0), 0);
+    const isUnderstaffed = finalList.length < minRequired;
 
     const bonusHtml = b.bonus
       ? `<span class="meta-item"><i class="fa-solid ${b.bonus.icon} bonus"></i> <span class="bonus">${b.bonus.label}</span></span>`
@@ -352,6 +480,8 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
         `<i class="fa-solid fa-clock"></i> Открывается на ${openAt} мин</span>`
       : `<span class="building-card__open-label building-card__open-label--early">` +
         `<i class="fa-solid fa-clock"></i> Открыто с начала</span>`;
+
+    if (isUnderstaffed) card.classList.add('building-card--understaffed');
 
     card.innerHTML = `
       <div class="building-card__header">
@@ -365,7 +495,10 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
           </div>
           <div class="building-card__open">${openLabel}</div>
         </div>
-        <div class="building-card__sum">Итого: <b>${sum.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</b></div>
+        <div class="building-card__sum">
+          ${isUnderstaffed ? `<span class="building-card__warn" title="Меньше минимума (${minRequired})"><i class="fa-solid fa-triangle-exclamation"></i> ${finalList.length}/${minRequired}</span>` : ''}
+          Итого: <b>${sum.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</b>
+        </div>
         <div class="building-card__actions">
           <button class="icon-btn building-card__copy" title="Скопировать список">
             <i class="fa-solid fa-copy"></i>
@@ -379,7 +512,7 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
 
     const zone = card.querySelector('.building-card__dropzone');
     if (finalList.length === 0) {
-      zone.innerHTML = '<div class="building-card__empty">Перетащите игроков сюда</div>';
+      zone.innerHTML = '<div class="building-card__empty">Кликните по игроку в списке участников, чтобы отправить его сюда</div>';
     } else {
       finalList.forEach(p => {
         const chip = makePlacedChip(p, b.id);
@@ -420,13 +553,12 @@ function buildCopyText(building, allocation, players) {
   const lines = [building.name];
   let n = 1;
 
-  finalList.forEach(p => {
+    finalList.forEach(p => {
     const player = byId.get(p.id) || p;
     const roles = player.roles || [];
     const stage = computeStage(player, building.id);
     const tags = [];
 
-    // 1. Сначала перелёты в порядке времени (только будущие этапы)
     const flights = (player.flights || []).sort((a, b) => (a.atMinute || 0) - (b.atMinute || 0));
     flights.forEach(f => {
       const flightStage = getFlightStage(player, f.toBuildingId);
@@ -435,14 +567,16 @@ function buildCopyText(building, allocation, players) {
       if (target) tags.push(target.name);
     });
 
-    // 2. Финальные метки ролей
-    // «Центр» больше не добавляем автоматически — только реальные перелёты.
     if (roles.includes('barrel')) {
       tags.push('Бочки');
     }
 
+    // Пометка роли в имени
+    const isPilot = roles.includes('pilot');
+    const nick = isPilot ? `${player.nick} (летчик)` : player.nick;
+
     const suffix = tags.length ? ` → ${tags.join(' → ')}` : '';
-    lines.push(`${n}. ${player.nick}${suffix}`);
+    lines.push(`${n}. ${nick}${suffix}`);
     n++;
   });
 
