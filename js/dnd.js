@@ -4,17 +4,20 @@ let touchStartX = 0, touchStartY = 0;
 let touchTimer = null;
 let touchGhost = null;
 
+let dndConfig = { scrollSpeed: 20, scrollZone: 100 };
+export function setDnDConfig(cfg) {
+  dndConfig = { ...dndConfig, ...cfg };
+}
+
 // ---------- Автоскролл ----------
-const SCROLL_ZONE = 100;    // px от края, где включается автопрокрутка
-const SCROLL_SPEED = 20;    // px за тик
-let autoScrollDir = 0;      // -1 вверх, 0 стоп, 1 вниз
+let autoScrollDir = 0;
 let autoScrollRAF = null;
 
 function startAutoScrollLoop() {
   if (autoScrollRAF) return;
   const tick = () => {
     if (autoScrollDir !== 0) {
-      window.scrollBy(0, autoScrollDir * SCROLL_SPEED);
+      window.scrollBy(0, autoScrollDir * dndConfig.scrollSpeed);
       autoScrollRAF = requestAnimationFrame(tick);
     } else {
       autoScrollRAF = null;
@@ -25,10 +28,10 @@ function startAutoScrollLoop() {
 
 function updateAutoScroll(clientY) {
   const h = window.innerHeight;
-  if (clientY < SCROLL_ZONE) {
+  if (clientY < dndConfig.scrollZone) {
     autoScrollDir = -1;
     startAutoScrollLoop();
-  } else if (clientY > h - SCROLL_ZONE) {
+  } else if (clientY > h - dndConfig.scrollZone) {
     autoScrollDir = 1;
     startAutoScrollLoop();
   } else {
@@ -45,10 +48,34 @@ function stopAutoScroll() {
 // ---------- Основной модуль ----------
 export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
   // ---------- HTML5 DnD (десктоп) ----------
-  document.addEventListener('dragstart', e => {
+    document.addEventListener('dragstart', e => {
+    // 1. СНАЧАЛА стрелка перелёта — она вложена в чип
+    const flightBtn = e.target.closest('.chip-flight-btn');
+    if (flightBtn) {
+      const parentChip = flightBtn.closest('.player-chip');
+      if (!parentChip) return;
+      dragged = {
+        kind: 'flight',
+        id: parentChip.dataset.id,
+        from: parentChip.dataset.from
+      };
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', 'flight');
+      parentChip.classList.add('dragging');
+      return;
+    }
+
+    // 2. Затем — сам чип (и из пула, и из таблицы)
     const chip = e.target.closest('.player-chip');
-    if (chip && !chip.classList.contains('placed')) {
-      dragged = { kind: 'player', id: chip.dataset.id, from: chip.dataset.from || 'pool' };
+    if (chip) {
+      // Игнор — если тащат за input, крестик, бейдж типа или иконку роли
+      if (e.target.closest('input, .building-card__remove, .player-chip__type, .player-chip__roles i')) return;
+
+      dragged = {
+        kind: 'player',
+        id: chip.dataset.id,
+        from: chip.dataset.from || 'pool'
+      };
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', dragged.id);
       chip.classList.add('dragging');
@@ -65,8 +92,6 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
   document.addEventListener('dragover', e => {
     if (!dragged) return;
     e.preventDefault();
-
-    // Автоскролл к краям экрана
     updateAutoScroll(e.clientY);
 
     const zone = e.target.closest('[data-drop]');
@@ -88,7 +113,7 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
     if (!dragged) return;
 
     const roleEl = e.target.closest('.role-chip');
-    if (roleEl) {
+    if (roleEl && dragged.kind === 'player') {
       e.preventDefault();
       roleEl.classList.remove('drop-target');
       const role = roleEl.dataset.role;
@@ -102,15 +127,23 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
     if (!zone) return;
     e.preventDefault();
     zone.classList.remove('drop-target');
-    onDropPlayer(dragged.id, dragged.from, zone.dataset.drop);
+    const to = zone.dataset.drop;
+
+    if (dragged.kind === 'flight') {
+      if (typeof window.__onAddFlight === 'function') {
+        window.__onAddFlight(dragged.id, to);
+      }
+    } else {
+      onDropPlayer(dragged.id, dragged.from, to);
+    }
     dragged = null;
   });
 
-  // ---------- Touch DnD (мобильные) ----------
+  // ---------- Touch DnD ----------
   document.addEventListener('touchstart', e => {
     const chip = e.target.closest('.player-chip');
     if (!chip || chip.classList.contains('placed')) return;
-    if (e.target.closest('input, button, .player-chip__type, .player-chip__roles')) return;
+    if (e.target.closest('input, button, .player-chip__type, .player-chip__roles, .player-chip__power-view, .chip-flight-btn')) return;
 
     const touch = e.touches[0];
     touchStartX = touch.clientX;
@@ -144,8 +177,6 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
     e.preventDefault();
 
     moveGhost(touch.clientX, touch.clientY);
-
-    // Автоскролл к краям
     updateAutoScroll(touch.clientY);
 
     document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
@@ -185,7 +216,7 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
     cleanupTouchDrag();
   }, { passive: true });
 
-  // ---------- кастомные события от чипа ----------
+  // ---------- Кастомные события от чипа ----------
   document.addEventListener('chip:remove', e => {
     if (typeof window.__onRemoveParticipant === 'function') {
       window.__onRemoveParticipant(e.detail.id);
@@ -213,9 +244,15 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
       window.__onPowerChanged(e.detail.id, e.detail.power);
     }
   });
+
+  document.addEventListener('chip:flights-changed', e => {
+    if (typeof window.__onFlightsChanged === 'function') {
+      window.__onFlightsChanged(e.detail.id, e.detail.removed);
+    }
+  });
 }
 
-// ---------- Хелперы для touch-ghost ----------
+// ---------- Хелперы ----------
 function createGhost(chip, x, y) {
   touchGhost = chip.cloneNode(true);
   touchGhost.style.position = 'fixed';

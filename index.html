@@ -10,7 +10,6 @@
 </head>
 <body>
 
-  <!-- Верхняя панель кнопок -->
   <header class="top-bar">
     <div class="top-bar__left">
       <button class="btn btn--ghost" id="btn-alliance">
@@ -21,20 +20,21 @@
       </button>
     </div>
     <div class="top-bar__right">
-      <button class="btn btn--ghost" id="btn-theme">
+      <button class="btn btn--ghost" id="btn-settings" title="Настройки">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+      <button class="btn btn--ghost" id="btn-theme" title="Тема">
         <i class="fa-solid fa-palette"></i>
       </button>
     </div>
   </header>
 
-  <!-- Заголовок -->
   <section class="hero">
     <h1 class="hero__alliance">[DEX] Dragon</h1>
     <h2 class="hero__event">Рейд на резервуар</h2>
     <p class="hero__date" id="event-date">—</p>
   </section>
 
-  <!-- Участники -->
   <section class="section">
     <div class="section__header">
       <h3 class="section__title">Участники</h3>
@@ -42,7 +42,7 @@
         <button class="btn btn--ghost" id="btn-toggle-placed">
           <i class="fa-solid fa-eye-slash"></i> Скрыть размещённых
         </button>
-        <button class="btn btn--primary" id="btn-add-player">
+        <button class="btn btn--primary" id="btn-open-alliance-add">
           <i class="fa-solid fa-plus"></i> Добавить
         </button>
       </div>
@@ -54,7 +54,7 @@
         <div class="role-chip" data-role="barrel" data-label="Бочка" title="Перетащите игрока сюда — назначить/снять роль Бочка">
           <i class="fa-solid fa-bottle-water"></i>
         </div>
-        <div class="role-chip" data-role="pilot" data-label="Летчик" title="Перетащите игрока сюда — назначить/снять роль Летчик">
+        <div class="role-chip" data-role="pilot" data-label="Крылья" title="Перетащите игрока сюда — назначить/снять роль Летчик">
           <i class="fa-solid fa-jet-fighter"></i>
         </div>
         <div class="role-chip role-chip--clear" data-role="clear" data-label="Сброс" title="Перетащите игрока сюда — снять все роли">
@@ -68,7 +68,6 @@
     </p>
   </section>
 
-  <!-- Распределение -->
   <section class="section">
     <div class="section__header">
       <h3 class="section__title">Распределение по точкам</h3>
@@ -82,6 +81,18 @@
       </div>
     </div>
 
+    <div class="filter-bar" id="filter-bar">
+      <button class="filter-btn" data-filter="main">
+        <i class="fa-solid fa-water"></i> Основные
+      </button>
+      <button class="filter-btn" data-filter="aux">
+        <i class="fa-solid fa-wrench"></i> Вспомогательные
+      </button>
+      <button class="filter-btn active" data-filter="all">
+        <i class="fa-solid fa-layer-group"></i> Все
+      </button>
+    </div>
+
     <div class="buildings" id="buildings"></div>
 
     <div class="approve-bar">
@@ -91,62 +102,38 @@
     </div>
   </section>
 
-  <!-- Модалка: добавление игрока -->
-  <div class="modal" id="modal-add-player" hidden>
+  <div class="modal" id="modal-alliance" hidden>
     <div class="modal__overlay" data-close></div>
-    <div class="modal__content">
+    <div class="modal__content modal__content--wide">
       <div class="modal__header">
-        <h4>Добавить участника</h4>
+        <h4>Состав союза</h4>
         <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
       </div>
 
       <div class="modal__body">
         <div class="field">
-          <label>Поиск по нику</label>
-          <input type="text" id="search-nick" placeholder="Введите ник..." />
-        </div>
-
-        <div class="field">
-          <label>Или новый ник</label>
+          <label>Поиск или новый игрок</label>
           <div class="row">
-            <input type="text" id="new-nick" placeholder="Ник нового игрока" />
-            <div class="switch">
-              <input type="radio" name="new-type" id="new-type-main" value="main" checked />
-              <label for="new-type-main">Основа</label>
-              <input type="radio" name="new-type" id="new-type-reserve" value="reserve" />
-              <label for="new-type-reserve">Резерв</label>
-            </div>
-            <button class="btn btn--primary" id="btn-create-player" title="Добавить">
-              <i class="fa-solid fa-plus"></i>
+            <input type="text" id="alliance-search" placeholder="Введите ник..." autocomplete="off" />
+            <button class="btn btn--primary" id="btn-create-member" title="Создать нового игрока" disabled>
+              <i class="fa-solid fa-plus"></i> Создать
             </button>
           </div>
+          <small id="search-hint" style="color:var(--text-dim); font-size:12px; display:block; margin-top:6px;"></small>
         </div>
 
-        <div class="alliance-list" id="alliance-list"></div>
+        <div class="alliance-list" id="alliance-manage-list"></div>
       </div>
 
       <div class="modal__footer">
-        <span class="modal__counter" id="add-counter">Добавлено: 0</span>
-        <button class="btn btn--success" id="btn-add-done">
+        <span class="modal__counter" id="add-counter">В составе события: 0</span>
+        <button class="btn btn--success" id="btn-alliance-done">
           <i class="fa-solid fa-check"></i> Готово
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Модалка: союз -->
-  <div class="modal" id="modal-alliance" hidden>
-    <div class="modal__overlay" data-close></div>
-    <div class="modal__content">
-      <div class="modal__header">
-        <h4>Состав союза</h4>
-        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal__body" id="alliance-manage-list"></div>
-    </div>
-  </div>
-
-  <!-- Модалка: история -->
   <div class="modal" id="modal-history" hidden>
     <div class="modal__overlay" data-close></div>
     <div class="modal__content modal__content--wide">
@@ -158,7 +145,6 @@
     </div>
   </div>
 
-  <!-- Модалка: тема -->
   <div class="modal" id="modal-theme" hidden>
     <div class="modal__overlay" data-close></div>
     <div class="modal__content modal__content--small">
@@ -177,7 +163,72 @@
     </div>
   </div>
 
-  <!-- Toast -->
+  <div class="modal" id="modal-settings" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h4>Настройки</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal__body">
+        <h5 class="settings-group">Прокрутка при перетаскивании</h5>
+        <div class="field">
+          <label>Скорость прокрутки: <b id="lbl-scroll-speed">20</b></label>
+          <input type="range" id="inp-scroll-speed" min="5" max="60" step="1" value="20" />
+        </div>
+        <div class="field">
+          <label>Зона срабатывания (px от края): <b id="lbl-scroll-zone">100</b></label>
+          <input type="range" id="inp-scroll-zone" min="40" max="200" step="10" value="100" />
+        </div>
+
+        <h5 class="settings-group">Автораспределение</h5>
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label>Летчиков (топ по БМ)</label>
+            <input type="number" id="inp-pilot-count" min="1" max="10" value="3" />
+          </div>
+          <div class="field" style="flex:1">
+            <label>Бочек (слабейших)</label>
+            <input type="number" id="inp-barrel-count" min="0" max="15" value="6" />
+          </div>
+        </div>
+
+        <h5 class="settings-group">Точки: приоритет, минимум игроков, время открытия</h5>
+        <div class="settings-grid settings-grid--head">
+          <span></span>
+          <span>Приоритет</span>
+          <span>Мин. игр.</span>
+          <span>Откр. (мин)</span>
+        </div>
+        <div class="settings-grid" id="settings-buildings"></div>
+
+        <h5 class="settings-group">Авто-перелёты</h5>
+        <div class="field">
+          <label class="settings-checkbox">
+            <input type="checkbox" id="inp-auto-flights" />
+            <span>Включить авто-перелёты</span>
+          </label>
+          <small style="color:var(--text-dim); font-size:12px; display:block; margin-top:4px;">
+            При автораспределении часть игроков автоматически получит перелёты на другие точки в момент их открытия.
+          </small>
+        </div>
+
+        <div class="flights-rules" id="flights-rules"></div>
+        <button class="btn btn--ghost" id="btn-add-flight-rule" style="margin-top:8px;">
+          <i class="fa-solid fa-plus"></i> Добавить правило
+        </button>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn--ghost" id="btn-settings-reset">
+          <i class="fa-solid fa-rotate-left"></i> Сбросить
+        </button>
+        <button class="btn btn--success" id="btn-settings-save">
+          <i class="fa-solid fa-check"></i> Сохранить
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
 
   <script type="module" src="js/app.js"></script>

@@ -4,7 +4,6 @@ import { db, collection, doc, addDoc, updateDoc, deleteDoc,
 const MEMBERS = 'members';
 const HISTORY = 'history';
 
-// ---------- Союз ----------
 export async function getMembers() {
   const snap = await getDocs(query(collection(db, MEMBERS), orderBy('nick')));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -27,7 +26,6 @@ export async function deleteMember(id) {
   await deleteDoc(doc(db, MEMBERS, id));
 }
 
-// ---------- История ----------
 export async function getHistory() {
   const snap = await getDocs(query(collection(db, HISTORY), orderBy('createdAt', 'desc')));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
