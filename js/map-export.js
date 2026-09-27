@@ -1,5 +1,6 @@
 import { BUILDINGS } from './allocator.js';
 import { SHORT_NAMES } from './short-names.js';
+import { loadIcon, preloadAllIcons, getCachedIcon } from './icons.js';
 
 const COLORS = {
   bg:        '#0f172a',
@@ -40,6 +41,8 @@ export async function exportMapAsJpg({
   settings,
   filename = 'raid-planner-map.jpg'
 }) {
+  // Предзагружаем все PNG-иконки
+  await preloadAllIcons();
   let DPR = 2;
   let CANVAS_WIDTH = 1400;
   const MAX_MAP_H = 900;
@@ -254,11 +257,24 @@ export async function exportMapAsJpg({
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    ctx.font = '18px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(ICON_EMOJI[b.icon] || '●', x, y + 1);
+        const iconImg = getCachedIcon(b.id);
+    if (iconImg) {
+      const iconSize = R_POINT_PX * 1.5; // меньше кружка
+      ctx.drawImage(
+        iconImg,
+        x - iconSize / 2,
+        y - iconSize / 2,
+        iconSize,
+        iconSize
+      );
+    } else {
+      // Fallback — эмодзи
+      ctx.font = '18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(ICON_EMOJI[b.icon] || '●', x, y + 1);
+    }
 
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = COLORS.text;

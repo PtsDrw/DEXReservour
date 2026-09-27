@@ -1,4 +1,6 @@
 import { BUILDINGS } from './allocator.js';
+import { ICON_FILES } from './icons.js';
+
 
 // Стандартные позиции точек
 export const DEFAULT_POSITIONS = {
@@ -183,18 +185,20 @@ function drawSvg() {
     circle.setAttribute('stroke-width', '0.5');
     g.appendChild(circle);
 
-    const fo = document.createElementNS(NS, 'foreignObject');
-    fo.setAttribute('x', -3.2);
-    fo.setAttribute('y', -3.2);
-    fo.setAttribute('width', 6.4);
-    fo.setAttribute('height', 6.4);
-    fo.setAttribute('pointer-events', 'none');
-    const div = document.createElement('div');
-    div.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    div.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:2.4px;';
-    div.innerHTML = `<i class="fa-solid ${b.icon}"></i>`;
-    fo.appendChild(div);
-    g.appendChild(fo);
+    const iconPath = ICON_FILES[b.id];
+    if (iconPath) {
+      const img = document.createElementNS(NS, 'image');
+      // Используем и xlink:href (для совместимости), и href
+      img.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', iconPath);
+      img.setAttribute('href', iconPath);
+      img.setAttribute('x', -2.6);
+      img.setAttribute('y', -2.6);
+      img.setAttribute('width', 5.2);
+      img.setAttribute('height', 5.2);
+      img.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      img.setAttribute('pointer-events', 'none');
+      g.appendChild(img);
+    }
 
     const label = document.createElementNS(NS, 'text');
     label.setAttribute('x', 0);
