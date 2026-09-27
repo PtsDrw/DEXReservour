@@ -2,25 +2,25 @@ import { BUILDINGS } from './allocator.js';
 
 // Стандартные позиции точек
 export const DEFAULT_POSITIONS = {
-  wp3:     { x: 18, y: 10 },
-  wp2:     { x: 82, y: 10 },
-  tc2:     { x: 82, y: 30 },
-  solar:   { x: 10, y: 35 },
-  dev:     { x: 40, y: 45 },
-  center:  { x: 55, y: 60 },
-  tc1:     { x: 40, y: 78 },
-  milfac:  { x: 85, y: 78 },
-  wp1:     { x: 12, y: 88 },
-  wp4:     { x: 75, y: 92 },
-  helipad: { x: 92, y: 70 }
+center: {x: 48, y: 57},
+dev: {x: 33, y: 44},
+helipad: {x: 84, y: 70},
+milfac:{x: 63, y: 67},
+solar:{x: 16, y: 48},
+tc1:{x: 32, y: 70},
+tc2:{x: 63, y: 43},
+wp1:{x: 17, y: 80},
+wp2:{x: 73, y: 31},
+wp3:{x: 27, y: 32},
+wp4:{x: 62, y: 81}
 };
 
 // 4 фиксированные зоны бочек
 export const DEFAULT_BARREL_ZONES = [
-  { x: 55, y: 30 },
-  { x: 30, y: 55 },
-  { x: 55, y: 78 },
-  { x: 30, y: 65 }
+  { x: 63, y: 57 },
+  { x: 35, y: 57 },
+  { x: 48, y: 70 },
+  { x: 48, y: 44 }
 ];
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -39,8 +39,6 @@ export function renderMap({
   settings,
   onMarkerClick
 }) {
-  console.log('=== renderMap ===');
-  console.log('settings.mapPositions:', settings.mapPositions);
   const svg = document.getElementById('map-svg');
   if (!svg) return;
 
@@ -51,7 +49,6 @@ export function renderMap({
 
   const saved = settings.mapPositions || {};
 
-  // Точки
   editPositions = {};
   BUILDINGS.forEach(b => {
     editPositions[b.id] = saved[b.id]
@@ -59,7 +56,6 @@ export function renderMap({
       : { ...DEFAULT_POSITIONS[b.id] };
   });
 
-  // Зоны бочек — всегда 4, берём сохранённые или дефолтные
   if (Array.isArray(saved.__barrels) && saved.__barrels.length === DEFAULT_BARREL_ZONES.length) {
     editBarrelZones = saved.__barrels.map(z => ({ x: z.x, y: z.y }));
   } else {
@@ -74,7 +70,7 @@ function drawSvg() {
   if (!svg) return;
   svg.innerHTML = '';
 
- const defs = document.createElementNS(NS, 'defs');
+  const defs = document.createElementNS(NS, 'defs');
   defs.innerHTML = `
     <marker id="arrowhead" markerWidth="6" markerHeight="6"
       refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -83,7 +79,6 @@ function drawSvg() {
   `;
   svg.appendChild(defs);
 
-  // Данные по точкам
   const byPoint = {};
   const playerById = new Map();
   currentParticipants.forEach(p => playerById.set(p.id, p));
@@ -96,7 +91,6 @@ function drawSvg() {
     });
   });
 
-  // Стрелки перелётов
   const arrows = [];
   currentParticipants.forEach(p => {
     const flights = p.flights || [];
@@ -116,8 +110,6 @@ function drawSvg() {
     arrowPairs[key] = (arrowPairs[key] || 0) + 1;
   });
 
-    // Радиусы маркеров (в единицах viewBox 0..100)
-  // Точка — кружок r=3.2, добавляем 0.8 отступа
   const R_POINT = 3.2 + 0.8;
 
   Object.entries(arrowPairs).forEach(([key, count]) => {
@@ -132,13 +124,11 @@ function drawSvg() {
     const ux = dx / len;
     const uy = dy / len;
 
-    // Начало и конец стрелки — отступаем от центров на радиусы маркеров
     const startX = from.x + ux * R_POINT;
     const startY = from.y + uy * R_POINT;
     const endX = to.x - ux * R_POINT;
     const endY = to.y - uy * R_POINT;
 
-    // Смещение кривой — для разделения параллельных стрелок
     const nx = -uy;
     const ny = ux;
     const offset = 2.5;
@@ -156,7 +146,6 @@ function drawSvg() {
     path.setAttribute('pointer-events', 'none');
     svg.appendChild(path);
 
-    // Подпись с количеством — в середине кривой, но сдвинута вверх/вбок
     const label = document.createElementNS(NS, 'text');
     label.setAttribute('x', String(cx + nx * 1.2));
     label.setAttribute('y', String(cy + ny * 1.2 - 0.6));
@@ -165,7 +154,6 @@ function drawSvg() {
     label.setAttribute('text-anchor', 'middle');
     label.setAttribute('font-weight', 'bold');
     label.setAttribute('pointer-events', 'none');
-    // Обводка вокруг цифры, чтобы читалась даже на стрелке
     label.setAttribute('stroke', 'var(--bg)');
     label.setAttribute('stroke-width', '0.5');
     label.setAttribute('paint-order', 'stroke fill');
@@ -173,7 +161,6 @@ function drawSvg() {
     svg.appendChild(label);
   });
 
-  // Маркеры точек
   BUILDINGS.forEach(b => {
     const pos = editPositions[b.id];
     if (!pos) return;
@@ -209,7 +196,7 @@ function drawSvg() {
     fo.appendChild(div);
     g.appendChild(fo);
 
-        const label = document.createElementNS(NS, 'text');
+    const label = document.createElementNS(NS, 'text');
     label.setAttribute('x', 0);
     label.setAttribute('y', 6);
     label.setAttribute('text-anchor', 'middle');
@@ -217,7 +204,6 @@ function drawSvg() {
     label.setAttribute('fill', 'var(--text)');
     label.setAttribute('font-weight', '700');
     label.setAttribute('pointer-events', 'none');
-    // Обводка — читаемость на фоне стрелок
     label.setAttribute('stroke', 'var(--bg)');
     label.setAttribute('stroke-width', '0.4');
     label.setAttribute('paint-order', 'stroke fill');
@@ -250,7 +236,6 @@ function drawSvg() {
     svg.appendChild(g);
   });
 
-  // Маркеры бочек — 4 фиксированные, можно только перетаскивать
   editBarrelZones.forEach((zone, index) => {
     const g = document.createElementNS(NS, 'g');
     g.setAttribute('transform', `translate(${zone.x}, ${zone.y})`);
@@ -293,7 +278,6 @@ function drawSvg() {
   });
 }
 
-// ---------- Перетаскивание ----------
 function attachDragHandlers(g, type, id) {
   let dragging = false;
 
@@ -355,7 +339,6 @@ function attachDragHandlers(g, type, id) {
   document.addEventListener('touchend', onUp);
 }
 
-// ---------- Публичные методы ----------
 export function setEditMode(enabled) {
   editMode = enabled;
   drawSvg();

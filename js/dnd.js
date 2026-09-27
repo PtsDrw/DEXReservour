@@ -43,7 +43,6 @@ function stopAutoScroll() {
 }
 
 export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
-  // ===== DESKTOP: перетаскивание чипов между точками =====
   if (!IS_TOUCH_DEVICE) {
     document.addEventListener('dragstart', e => {
       const chip = e.target.closest('.player-chip');
@@ -92,7 +91,6 @@ export function initDnD({ onDropPlayer, onToggleRole, onClearRoles }) {
     });
   }
 
-  // ---------- Кастомные события от чипа ----------
   document.addEventListener('chip:remove', e => {
     if (typeof window.__onRemoveParticipant === 'function') {
       window.__onRemoveParticipant(e.detail.id);

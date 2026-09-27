@@ -1,7 +1,9 @@
 import { getMembers, addMember, updateMember, deleteMember,
          getHistory, saveHistory, deleteHistory,
          getSharedSettings, saveSharedSettings,
-         bulkSaveHistory } from './storage.js';
+         bulkSaveHistory,
+         getPresets, addPreset, deletePreset, bulkSavePresets } from './storage.js';
+import { ensureAnonymousAuth } from './firebase-config.js';
 import { BUILDINGS, allocatePlayers } from './allocator.js';
 import {
   renderParticipants, renderBuildings, renderAllianceManageList, escapeHtml
@@ -12,16 +14,14 @@ import {
   DEFAULT_POSITIONS, DEFAULT_BARREL_ZONES
 } from './map.js';
 import { exportMapAsJpg } from './map-export.js';
-import { ensureAnonymousAuth } from './firebase-config.js';
-// ---------- Настройки ----------
+
 const SETTINGS_KEY = 'raid_planner_settings_v1';
 
 const DEFAULT_SETTINGS = {
-  scrollSpeed: 20,
-  scrollZone: 100,
   pilotCount: 3,
   barrelCount: 6,
   useSharedSettings: false,
+  useShortNamesCopy: false,
   mapPositions: null,
 
   openMinutes: {
@@ -133,6 +133,7 @@ function loadSettings() {
           : structuredClone(DEFAULT_SETTINGS.autoFlights.rules)
       },
       useSharedSettings: !!(saved.useSharedSettings),
+      useShortNamesCopy: !!saved.useShortNamesCopy,
       mapPositions: saved.mapPositions || null
     };
   } catch (e) {
@@ -150,8 +151,6 @@ async function saveSettingsToShared() {
 
   const { presets, mapPositions, ...clean } = settings;
 
-  // Отправляем mapPositions только если оно задано —
-  // чтобы не затирать уже сохранённые позиции карты
   const payload = { ...clean };
   if (mapPositions) payload.mapPositions = mapPositions;
 
@@ -168,6 +167,13 @@ const state = {
   hidePlaced: localStorage.getItem('raid_hide_placed') === '1',
   buildingsFilter: localStorage.getItem('raid_buildings_filter') || 'all'
 };
+
+
+// Имя пользователя для подписи пресетов
+function getUserName() {
+  return localStorage.getItem('raid_user_name') || '';
+}
+
 
 // ---------- Дата ----------
 function nextSunday() {
@@ -263,20 +269,36 @@ window.__toast = toast;
 
 // ---------- Инициализация ----------
 async function init() {
+  // Анонимная авторизация для доступа к Firebase
   await ensureAnonymousAuth();
+
   if (settings.useSharedSettings) {
-    const shared = await getSharedSettings();
-    if (shared) {
-      settings = {
-        ...structuredClone(DEFAULT_SETTINGS),
-        ...shared,
-        useSharedSettings: true
-      };
-      saveSettingsLocal();
+    try {
+      const shared = await getSharedSettings();
+      if (shared) {
+        const localHidePlaced = settings.hidePlaced;
+        const localBuildingsFilter = settings.buildingsFilter;
+
+        settings = {
+          ...structuredClone(DEFAULT_SETTINGS),
+          ...shared,
+          useSharedSettings: true,
+          hidePlaced: localHidePlaced,
+          buildingsFilter: localBuildingsFilter
+        };
+        saveSettingsLocal();
+      }
+    } catch (e) {
+      console.warn('Не удалось загрузить общие настройки:', e);
     }
   }
 
-  state.members = await getMembers();
+  try {
+    state.members = await getMembers();
+  } catch (e) {
+    console.warn('Не удалось загрузить состав:', e);
+    state.members = [];
+  }
 
   const draft = loadDraft();
   if (draft) {
@@ -286,11 +308,14 @@ async function init() {
     state.barrels = draft.barrels || [];
   }
 
-  setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
+  setDnDConfig({ scrollSpeed: 20, scrollZone: 100 });
 
   refresh();
   updateAddCounter();
   syncFilterButtons();
+
+  // Геттер для ui.js
+  window.__getUseShortNames = () => !!settings.useShortNamesCopy;
 
   initDnD({
     onDropPlayer: (id, from, to) => {
@@ -905,11 +930,6 @@ document.getElementById('theme-grid').addEventListener('click', e => {
 
 // ---------- Настройки ----------
 function renderSettingsModal() {
-  document.getElementById('inp-scroll-speed').value = settings.scrollSpeed;
-  document.getElementById('lbl-scroll-speed').textContent = settings.scrollSpeed;
-  document.getElementById('inp-scroll-zone').value = settings.scrollZone;
-  document.getElementById('lbl-scroll-zone').textContent = settings.scrollZone;
-
   document.getElementById('inp-pilot-count').value = settings.pilotCount;
   document.getElementById('inp-barrel-count').value = settings.barrelCount;
 
@@ -936,6 +956,7 @@ function renderSettingsModal() {
 
   document.getElementById('inp-auto-flights').checked = !!settings.autoFlights?.enabled;
   document.getElementById('inp-shared-settings').checked = !!settings.useSharedSettings;
+  document.getElementById('inp-short-names-copy').checked = !!settings.useShortNamesCopy;
 
   renderFlightRules();
   renderPresets();
@@ -1010,32 +1031,52 @@ function renderPresets() {
         <i class="fa-solid fa-check"></i> Применить
       </button>
     `;
-    card.querySelector('.preset-card__apply').onclick = () => {
-      if (!confirm(`Применить пресет «${preset.name}»? Текущие настройки будут заменены.`)) return;
-      const cfg = preset.config || {};
-      settings = {
-        ...structuredClone(DEFAULT_SETTINGS),
-        ...settings,
-        ...cfg,
-        openMinutes: { ...DEFAULT_SETTINGS.openMinutes, ...(cfg.openMinutes || {}) },
-        priorities: { ...DEFAULT_SETTINGS.priorities, ...(cfg.priorities || {}) },
-        minPlayers: { ...DEFAULT_SETTINGS.minPlayers, ...(cfg.minPlayers || {}) },
-        autoFlights: {
-          enabled: !!(cfg.autoFlights?.enabled),
-          rules: cfg.autoFlights?.rules?.length
-            ? cfg.autoFlights.rules
-            : structuredClone(DEFAULT_SETTINGS.autoFlights.rules)
-        }
-      };
-      delete settings.presets;
-      saveSettingsLocal();
-      setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
-      renderSettingsModal();
-      refresh();
-      toast(`Пресет «${preset.name}» применён`);
-    };
+    card.querySelector('.preset-card__apply').onclick = () => applyPresetConfig(preset.config, preset.name);
     container.appendChild(card);
   });
+}
+
+function getCurrentPresetConfig() {
+  return {
+    pilotCount: settings.pilotCount,
+    barrelCount: settings.barrelCount,
+    openMinutes: { ...settings.openMinutes },
+    priorities: { ...settings.priorities },
+    minPlayers: { ...settings.minPlayers },
+    autoFlights: {
+      enabled: !!settings.autoFlights?.enabled,
+      rules: (settings.autoFlights?.rules || []).map(r => ({ ...r }))
+    }
+  };
+}
+
+// Применить конфиг пресета
+function applyPresetConfig(cfg, name) {
+  if (!confirm(`Применить пресет «${name}»? Текущие настройки будут заменены.`)) return;
+
+  const base = structuredClone(DEFAULT_SETTINGS);
+  delete base.presets;
+
+  settings = {
+    ...base,
+    ...settings,
+    ...cfg,
+    openMinutes: { ...base.openMinutes, ...(cfg.openMinutes || {}) },
+    priorities: { ...base.priorities, ...(cfg.priorities || {}) },
+    minPlayers: { ...base.minPlayers, ...(cfg.minPlayers || {}) },
+    autoFlights: {
+      enabled: !!(cfg.autoFlights?.enabled),
+      rules: cfg.autoFlights?.rules?.length
+        ? cfg.autoFlights.rules
+        : structuredClone(base.autoFlights.rules)
+    }
+  };
+
+  saveSettingsLocal();
+  setDnDConfig({ scrollSpeed: 20, scrollZone: 100 });
+  renderSettingsModal();
+  refresh();
+  toast(`Пресет «${name}» применён`);
 }
 
 document.getElementById('btn-settings').onclick = () => {
@@ -1043,21 +1084,16 @@ document.getElementById('btn-settings').onclick = () => {
   openModal('modal-settings');
 };
 
-document.getElementById('inp-scroll-speed').oninput = e => {
-  document.getElementById('lbl-scroll-speed').textContent = e.target.value;
-};
-document.getElementById('inp-scroll-zone').oninput = e => {
-  document.getElementById('lbl-scroll-zone').textContent = e.target.value;
-};
-
 document.getElementById('btn-settings-save').onclick = async () => {
-  settings.scrollSpeed = Number(document.getElementById('inp-scroll-speed').value);
-  settings.scrollZone = Number(document.getElementById('inp-scroll-zone').value);
+  const wasShared = !!settings.useSharedSettings;
+  const willBeShared = document.getElementById('inp-shared-settings').checked;
+
   settings.pilotCount = Number(document.getElementById('inp-pilot-count').value);
   settings.barrelCount = Number(document.getElementById('inp-barrel-count').value);
   settings.autoFlights = settings.autoFlights || { enabled: false, rules: [] };
   settings.autoFlights.enabled = document.getElementById('inp-auto-flights').checked;
-  settings.useSharedSettings = document.getElementById('inp-shared-settings').checked;
+  settings.useSharedSettings = willBeShared;
+  settings.useShortNamesCopy = document.getElementById('inp-short-names-copy').checked;
 
   document.querySelectorAll('#settings-buildings .settings-row').forEach(row => {
     const sel = row.querySelector('select');
@@ -1069,23 +1105,67 @@ document.getElementById('btn-settings-save').onclick = async () => {
   });
 
   saveSettingsLocal();
-  setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
-  closeModal('modal-settings');
-  refresh();
 
-  if (settings.useSharedSettings) {
+  // Галочку только что включили — подтянуть общие настройки
+  if (!wasShared && willBeShared) {
+    closeModal('modal-settings');
+    toast('Загружаем общие настройки союза…');
+
+    try {
+      const shared = await getSharedSettings();
+      if (shared) {
+        settings = {
+          ...structuredClone(DEFAULT_SETTINGS),
+          ...shared,
+          useSharedSettings: true,
+          hidePlaced: settings.hidePlaced,
+          buildingsFilter: settings.buildingsFilter
+        };
+        saveSettingsLocal();
+        renderSettingsModal();
+        refresh();
+        toast('Общие настройки союза загружены');
+      } else {
+        const ok = await saveSettingsToShared();
+        renderSettingsModal();
+        refresh();
+        toast(ok ? 'Общие настройки созданы' : 'Сохранено локально (ошибка отправки)');
+      }
+    } catch (e) {
+      console.warn('Ошибка загрузки общих настроек:', e);
+      toast('Не удалось загрузить общие настройки');
+    }
+    return;
+  }
+
+  // Выключили
+  if (wasShared && !willBeShared) {
+    closeModal('modal-settings');
+    refresh();
+    toast('Синхронизация отключена, работаем локально');
+    return;
+  }
+
+  // Была и осталась включённой — отправляем
+  if (willBeShared) {
+    closeModal('modal-settings');
+    refresh();
     const ok = await saveSettingsToShared();
     toast(ok ? 'Настройки синхронизированы с союзом' : 'Сохранено локально (ошибка отправки)');
-  } else {
-    toast('Настройки сохранены');
+    return;
   }
+
+  // Была и осталась выключенной
+  closeModal('modal-settings');
+  refresh();
+  toast('Настройки сохранены');
 };
 
 document.getElementById('btn-settings-reset').onclick = () => {
   if (!confirm('Сбросить все настройки к значениям по умолчанию?')) return;
   settings = structuredClone(DEFAULT_SETTINGS);
   saveSettingsLocal();
-  setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
+  setDnDConfig({ scrollSpeed: 20, scrollZone: 100 });
   renderSettingsModal();
   refresh();
   toast('Сброшено');
@@ -1150,10 +1230,191 @@ document.getElementById('inp-settings-import').onchange = (e) => {
       };
       delete settings.presets;
       saveSettingsLocal();
-      setDnDConfig({ scrollSpeed: settings.scrollSpeed, scrollZone: settings.scrollZone });
+      setDnDConfig({ scrollSpeed: 20, scrollZone: 100 });
       renderSettingsModal();
       refresh();
       toast('Настройки загружены из файла');
+    } catch (err) {
+      console.error(err);
+      toast('Не удалось прочитать файл');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+};
+
+// ---------- Пресеты союза ----------
+document.getElementById('btn-open-presets').onclick = async () => {
+  openModal('modal-presets');
+  await renderPresetsList();
+};
+
+document.getElementById('btn-preset-save-current').onclick = () => {
+  // Открываем модалку с формой
+  document.getElementById('inp-preset-name').value = '';
+  document.getElementById('inp-preset-desc').value = '';
+  document.getElementById('inp-preset-author').value = getUserName() || '';
+
+  openModal('modal-preset-save');
+  setTimeout(() => document.getElementById('inp-preset-name').focus(), 100);
+};
+
+// Обработчик подтверждения сохранения пресета
+document.getElementById('btn-preset-save-confirm').onclick = async () => {
+  const name = document.getElementById('inp-preset-name').value.trim();
+  const description = document.getElementById('inp-preset-desc').value.trim();
+  const author = document.getElementById('inp-preset-author').value.trim();
+
+  if (!name) {
+    toast('Введите название пресета');
+    document.getElementById('inp-preset-name').focus();
+    return;
+  }
+  if (!author) {
+    toast('Введите ваше имя');
+    document.getElementById('inp-preset-author').focus();
+    return;
+  }
+
+  // Запоминаем имя для следующих раз
+  localStorage.setItem('raid_user_name', author);
+
+  const preset = {
+    name,
+    description,
+    author,
+    config: getCurrentPresetConfig()
+  };
+
+  const ok = await addPreset(preset);
+  if (ok) {
+    toast('Пресет сохранён');
+    closeModal('modal-preset-save');
+    await renderPresetsList();
+  } else {
+    toast('Не удалось сохранить пресет');
+  }
+};
+
+// Enter в любом поле — сохранить
+['inp-preset-name', 'inp-preset-desc', 'inp-preset-author'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('btn-preset-save-confirm').click();
+    }
+  });
+});
+
+async function renderPresetsList() {
+  const container = document.getElementById('presets-list');
+  container.innerHTML = '<div class="building-card__empty">Загрузка…</div>';
+
+  const presets = await getPresets();
+  container.innerHTML = '';
+
+  if (presets.length === 0) {
+    container.innerHTML = '<div class="building-card__empty">Пока никто не сохранил пресетов. Нажмите «Сохранить текущие», чтобы создать первый.</div>';
+    return;
+  }
+
+  const user = getUserName();
+
+  presets.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'preset-item';
+
+    const dateStr = p.createdAt?.toDate
+      ? p.createdAt.toDate().toLocaleDateString('ru-RU')
+      : '—';
+
+    const isMine = user && p.author === user;
+
+    item.innerHTML = `
+      <div class="preset-item__head">
+        <div class="preset-item__info">
+          <div class="preset-item__name">${escapeHtml(p.name)}</div>
+          <div class="preset-item__meta">
+            Автор: ${escapeHtml(p.author || '—')} · ${dateStr}
+          </div>
+          ${p.description ? `<div class="preset-item__desc">${escapeHtml(p.description)}</div>` : ''}
+        </div>
+        <div class="preset-item__actions">
+          <button class="btn btn--primary btn-apply"><i class="fa-solid fa-check"></i> Применить</button>
+          ${isMine ? `<button class="btn btn--ghost btn-del"><i class="fa-solid fa-trash"></i></button>` : ''}
+        </div>
+      </div>
+    `;
+
+    item.querySelector('.btn-apply').onclick = () => {
+      applyPresetConfig(p.config, p.name);
+      closeModal('modal-presets');
+    };
+
+    if (isMine) {
+      item.querySelector('.btn-del').onclick = async () => {
+        if (!confirm(`Удалить пресет «${p.name}»?`)) return;
+        const ok = await deletePreset(p.id);
+        if (ok) {
+          toast('Пресет удалён');
+          await renderPresetsList();
+        } else {
+          toast('Не удалось удалить пресет');
+        }
+      };
+    }
+
+    container.appendChild(item);
+  });
+}
+
+// Экспорт пресетов в файл
+document.getElementById('btn-preset-export').onclick = async () => {
+  const presets = await getPresets();
+  if (presets.length === 0) {
+    toast('Нет пресетов для экспорта');
+    return;
+  }
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    count: presets.length,
+    presets
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `raid-planner-presets-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`Экспортировано пресетов: ${presets.length}`);
+};
+
+// Импорт пресетов из файла
+document.getElementById('btn-preset-import').onclick = () => {
+  document.getElementById('inp-preset-import').click();
+};
+
+document.getElementById('inp-preset-import').onchange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const list = Array.isArray(data) ? data : (data.presets || []);
+      if (!list.length) {
+        toast('Файл пуст или неверного формата');
+        return;
+      }
+      if (!confirm(`Импортировать ${list.length} пресетов?`)) return;
+      toast('Идёт импорт…');
+      const ids = await bulkSavePresets(list);
+      toast(`Импортировано: ${ids.length} из ${list.length}`);
+      await renderPresetsList();
     } catch (err) {
       console.error(err);
       toast('Не удалось прочитать файл');
@@ -1206,20 +1467,15 @@ document.getElementById('btn-map-save').onclick = async () => {
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span class="btn-label">Сохраняем…</span>';
 
   try {
-    // 1. Получаем текущие позиции из модуля карты
-    const positions = getPositions();   // ← обязательно объявляем здесь
+    const positions = getPositions();
     settings.mapPositions = positions;
-
-    // 2. Сохраняем локально
     saveSettingsLocal();
 
-    // 3. Синхронизируем с Firebase, если включено
     let synced = false;
     if (settings.useSharedSettings) {
       synced = await saveSettingsToShared();
     }
 
-    // 4. Возвращаемся в режим просмотра
     mapEditMode = false;
     setEditMode(false);
     document.getElementById('btn-map-edit').hidden = false;
@@ -1227,11 +1483,10 @@ document.getElementById('btn-map-save').onclick = async () => {
     document.getElementById('btn-map-reset').hidden = true;
     document.getElementById('map-edit-hint').hidden = true;
 
-    // 5. Тост
     if (settings.useSharedSettings) {
       toast(synced
         ? 'Позиции маркеров сохранены и синхронизированы с союзом'
-        : 'Сохранено локально (ошибка синхронизации)');
+        : 'Сохранено локально, но не отправлено в Firebase');
     } else {
       toast('Позиции маркеров сохранены локально');
     }
@@ -1250,7 +1505,6 @@ document.getElementById('btn-map-reset').onclick = () => {
   toast('Позиции сброшены (не забудьте сохранить)');
 };
 
-// ---------- Скачивание карты в JPG ----------
 document.getElementById('btn-map-download').onclick = async () => {
   const btn = document.getElementById('btn-map-download');
   const original = btn.innerHTML;
@@ -1346,6 +1600,6 @@ document.getElementById('modal-map').addEventListener('click', e => {
 
 // ---------- Старт ----------
 init().catch(err => {
-  console.error(err);
-  toast('Ошибка загрузки. Проверьте Firebase-конфиг.');
+  console.error('Ошибка инициализации:', err);
+  toast('Ошибка загрузки. Проверьте консоль.');
 });

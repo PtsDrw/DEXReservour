@@ -10,7 +10,7 @@
 </head>
 <body>
 
-    <header class="top-bar">
+  <header class="top-bar">
     <div class="top-bar__left">
       <button class="btn btn--ghost" id="btn-alliance" title="Союз">
         <i class="fa-solid fa-users"></i>
@@ -156,8 +156,8 @@
     <div class="modal__content modal__content--full">
       <div class="modal__header">
         <h4>Карта расстановки</h4>
-                <div class="map-header-actions">
-                            <button class="btn btn--ghost" id="btn-map-download" title="Скачать карту в JPG">
+        <div class="map-header-actions">
+          <button class="btn btn--ghost" id="btn-map-download" title="Скачать карту в JPG">
             <i class="fa-solid fa-download"></i>
             <span class="btn-label">Скачать JPG</span>
           </button>
@@ -214,16 +214,6 @@
         <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal__body">
-        <h5 class="settings-group">Прокрутка при перетаскивании</h5>
-        <div class="field">
-          <label>Скорость прокрутки: <b id="lbl-scroll-speed">20</b></label>
-          <input type="range" id="inp-scroll-speed" min="5" max="60" step="1" value="20" />
-        </div>
-        <div class="field">
-          <label>Зона срабатывания (px от края): <b id="lbl-scroll-zone">100</b></label>
-          <input type="range" id="inp-scroll-zone" min="40" max="200" step="10" value="100" />
-        </div>
-
         <h5 class="settings-group">Автораспределение</h5>
         <div class="row">
           <div class="field" style="flex:1">
@@ -234,6 +224,17 @@
             <label>Бочек (слабейших)</label>
             <input type="number" id="inp-barrel-count" min="0" max="15" value="6" />
           </div>
+        </div>
+
+        <h5 class="settings-group">Копирование</h5>
+        <div class="field">
+          <label class="settings-checkbox">
+            <input type="checkbox" id="inp-short-names-copy" />
+            <span>Использовать сокращённые названия при копировании</span>
+          </label>
+          <small style="color:var(--text-dim); font-size:12px; display:block; margin-top:4px;">
+            Вместо «Центральный резервуар» будет «Центр», вместо «Военный завод» — «Военка» и т.д.
+          </small>
         </div>
 
         <h5 class="settings-group">Точки: приоритет, минимум игроков, время открытия</h5>
@@ -263,6 +264,9 @@
 
         <h5 class="settings-group">Пресеты</h5>
         <div class="settings-presets" id="settings-presets"></div>
+        <button class="btn btn--ghost" id="btn-open-presets" style="margin-top:8px;">
+          <i class="fa-solid fa-users"></i> Пресеты союза (загрузить/сохранить)
+        </button>
 
         <h5 class="settings-group">Общие настройки</h5>
         <div class="field">
@@ -293,6 +297,59 @@
         <button class="btn btn--success" id="btn-settings-save">
           <i class="fa-solid fa-check"></i> Сохранить
         </button>
+      </div>
+    </div>
+  </div>
+      <div class="modal" id="modal-preset-save" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content modal__content--small">
+      <div class="modal__header">
+        <h4>Сохранить пресет</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal__body">
+        <div class="field">
+          <label>Название пресета</label>
+          <input type="text" id="inp-preset-name" placeholder="Например: Стандарт на выходные" maxlength="60" />
+        </div>
+        <div class="field">
+          <label>Описание (необязательно)</label>
+          <input type="text" id="inp-preset-desc" placeholder="Коротко о распределении" maxlength="120" />
+        </div>
+        <div class="field">
+          <label>Ваше имя (для подписи авторства)</label>
+          <input type="text" id="inp-preset-author" placeholder="Ваш ник" maxlength="40" />
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn--ghost" data-close>Отмена</button>
+        <button class="btn btn--success" id="btn-preset-save-confirm">
+          <i class="fa-solid fa-check"></i> Сохранить
+        </button>
+      </div>
+    </div>
+  </div>
+    <div class="modal" id="modal-presets" hidden>
+    <div class="modal__overlay" data-close></div>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h4>Пресеты союза</h4>
+        <button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal__body">
+        <div class="row" style="margin-bottom:12px; flex-wrap:wrap;">
+          <button class="btn btn--primary" id="btn-preset-save-current">
+            <i class="fa-solid fa-floppy-disk"></i> Сохранить текущие
+          </button>
+          <button class="btn btn--ghost" id="btn-preset-export">
+            <i class="fa-solid fa-download"></i> Экспорт JSON
+          </button>
+          <button class="btn btn--ghost" id="btn-preset-import">
+            <i class="fa-solid fa-upload"></i> Импорт JSON
+          </button>
+          <input type="file" id="inp-preset-import" accept=".json,application/json" hidden />
+        </div>
+        <div id="presets-list"></div>
       </div>
     </div>
   </div>

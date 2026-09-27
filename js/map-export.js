@@ -1,6 +1,6 @@
 import { BUILDINGS } from './allocator.js';
+import { SHORT_NAMES } from './short-names.js';
 
-// Цвета для canvas (нельзя использовать CSS-переменные)
 const COLORS = {
   bg:        '#0f172a',
   bgCard:    '#1e293b',
@@ -14,7 +14,6 @@ const COLORS = {
   warning:   '#f59e0b'
 };
 
-// Иконки FontAwesome заменяем на текстовые эмодзи
 const ICON_EMOJI = {
   'fa-industry': '🏭',
   'fa-filter': '🚰',
@@ -25,14 +24,12 @@ const ICON_EMOJI = {
   'fa-water': '💧'
 };
 
-// Общие размеры карточек
 const CARD_GAP = 20;
 const CARD_HEADER_HEIGHT = 40;
-const CARD_ROW_HEIGHT = 28;
+const CARD_ROW_HEIGHT = 40;
 const CARD_PADDING = 16;
 const CARD_BOTTOM_MARGIN = 20;
 
-// Лимит canvas по площади (iOS Safari ломается на больших размерах)
 const MAX_CANVAS_AREA = 14_000_000;
 
 export async function exportMapAsJpg({
@@ -43,13 +40,11 @@ export async function exportMapAsJpg({
   settings,
   filename = 'raid-planner-map.jpg'
 }) {
-  // ---- размеры canvas ----
   let DPR = 2;
   let CANVAS_WIDTH = 1400;
-  const MAP_AREA_HEIGHT = 900;
+  const MAX_MAP_H = 900;
   const PADDING = 40;
 
-  // ---- агрегация данных по точкам ----
   const byPoint = {};
   const playerById = new Map();
   participants.forEach(p => playerById.set(p.id, p));
@@ -62,7 +57,6 @@ export async function exportMapAsJpg({
     });
   });
 
-  // ---- карточки зданий ----
   const cards = BUILDINGS.map(b => {
     const players = (byPoint[b.id] || []).slice();
     players.sort((a, b2) => {
@@ -77,7 +71,6 @@ export async function exportMapAsJpg({
   const columns = 3;
   const rows = Math.ceil(cards.length / columns);
 
-  // ---- высота блока карточек ----
   let totalCardsHeight = 0;
   for (let r = 0; r < rows; r++) {
     let maxRows = 1;
@@ -90,40 +83,6 @@ export async function exportMapAsJpg({
     if (r < rows - 1) totalCardsHeight += CARD_BOTTOM_MARGIN;
   }
 
-  let CANVAS_HEIGHT = PADDING + MAP_AREA_HEIGHT + PADDING + totalCardsHeight + PADDING;
-
-  // ---- проверка лимита площади ----
-  let area = CANVAS_WIDTH * DPR * CANVAS_HEIGHT * DPR;
-  while (area > MAX_CANVAS_AREA && DPR > 1) {
-    DPR -= 0.5;
-    area = CANVAS_WIDTH * DPR * CANVAS_HEIGHT * DPR;
-  }
-  while (area > MAX_CANVAS_AREA && CANVAS_WIDTH > 600) {
-    CANVAS_WIDTH -= 100;
-    area = CANVAS_WIDTH * DPR * CANVAS_HEIGHT * DPR;
-  }
-
-  console.log('Canvas:', {
-    logical: `${CANVAS_WIDTH}×${CANVAS_HEIGHT}`,
-    DPR,
-    physical: `${Math.round(CANVAS_WIDTH * DPR)}×${Math.round(CANVAS_HEIGHT * DPR)}`,
-    areaMpx: (area / 1_000_000).toFixed(1)
-  });
-
-  // ---- создаём canvas ----
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(CANVAS_WIDTH * DPR);
-  canvas.height = Math.round(CANVAS_HEIGHT * DPR);
-  const ctx = canvas.getContext('2d');
-  ctx.scale(DPR, DPR);
-
-  // Фон
-  ctx.fillStyle = COLORS.bg;
-  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-  // ---- карта ----
-    // ---- вычисляем bounding box по всем маркерам ----
-  // Запас в единицах viewBox (примерно 5 = отступ под подписи и кружки)
   const BB_PADDING = 6;
 
   let minX = 100, minY = 100, maxX = 0, maxY = 0;
@@ -151,47 +110,53 @@ export async function exportMapAsJpg({
     minX = 0; minY = 0; maxX = 100; maxY = 100;
   }
 
-  // Расширяем область: подписи снизу (y + 10), кружки сверху (y - 5)
   minX = Math.max(0, minX - BB_PADDING);
   minY = Math.max(0, minY - BB_PADDING);
   maxX = Math.min(100, maxX + BB_PADDING);
-  maxY = Math.min(100, maxY + BB_PADDING + 4);  // запас под подписи снизу
+  maxY = Math.min(100, maxY + BB_PADDING + 4);
 
-  const bboxW = maxX - minX;
-  const bboxH = maxY - minY;
-
-  // Соотношение сторон области
+  const bboxW = Math.max(1, maxX - minX);
+  const bboxH = Math.max(1, maxY - minY);
   const bboxAspect = bboxW / bboxH;
 
-  // Целевая ширина карты (та же, что и раньше)
   const mapW = CANVAS_WIDTH - PADDING * 2;
-
-  // Подбираем высоту карты: сохраняем пропорции bbox
-  // НО ограничиваем разумно — не больше MAP_AREA_HEIGHT * 1.3
   let mapH = mapW / bboxAspect;
+  const MIN_MAP_H = 300;
+  if (mapH > MAX_MAP_H) mapH = MAX_MAP_H;
+  if (mapH < MIN_MAP_H) mapH = MIN_MAP_H;
 
-  // Если карта получилась слишком высокой — сжимаем по ширине
-  const MAX_MAP_H = MAP_AREA_HEIGHT;
-  const MIN_MAP_H = 400;
-  if (mapH > MAX_MAP_H) {
-    mapH = MAX_MAP_H;
-  } else if (mapH < MIN_MAP_H) {
-    mapH = MIN_MAP_H;
+  let CANVAS_HEIGHT = PADDING + mapH + PADDING + totalCardsHeight + PADDING;
+
+  let area = CANVAS_WIDTH * DPR * CANVAS_HEIGHT * DPR;
+  while (area > MAX_CANVAS_AREA && DPR > 1) {
+    DPR -= 0.5;
+    area = CANVAS_WIDTH * DPR * CANVAS_HEIGHT * DPR;
   }
+  while (area > MAX_CANVAS_AREA && CANVAS_WIDTH > 600) {
+    CANVAS_WIDTH -= 100;
+    area = CANVAS_WIDTH * DPR * CANVAS_HEIGHT * DPR;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(CANVAS_WIDTH * DPR);
+  canvas.height = Math.round(CANVAS_HEIGHT * DPR);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
   const mapX = PADDING;
   const mapY = PADDING;
 
-  // Функции перевода: из viewBox 0..100 в пиксели, но с учётом обрезки
-  const tx = (x) => mapX + ((x - minX) / bboxW) * mapW;
-  const ty = (y) => mapY + ((y - minY) / bboxH) * (mapH - 40); // 40 — резерв под подписи
-
-  // Рисуем фон карты
   ctx.fillStyle = COLORS.bgCard;
   roundRect(ctx, mapX, mapY, mapW, mapH, 16);
   ctx.fill();
 
-  // ---- стрелки перелётов ----
+  const mapContentH = mapH - 40;
+  const tx = (x) => mapX + ((x - minX) / bboxW) * mapW;
+  const ty = (y) => mapY + ((y - minY) / bboxH) * mapContentH;
+
   const arrowPairs = {};
   participants.forEach(p => {
     const flights = p.flights || [];
@@ -240,7 +205,6 @@ export async function exportMapAsJpg({
     ctx.quadraticCurveTo(cx, cy, ex, ey);
     ctx.stroke();
 
-    // Наконечник
     const headLen = 12;
     const headW = 7;
     const angle = Math.atan2(ey - cy, ex - cx);
@@ -258,7 +222,6 @@ export async function exportMapAsJpg({
     ctx.closePath();
     ctx.fill();
 
-    // Подпись количества
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
     ctx.font = 'bold 14px system-ui, sans-serif';
@@ -273,7 +236,6 @@ export async function exportMapAsJpg({
     ctx.restore();
   });
 
-  // ---- маркеры точек ----
   BUILDINGS.forEach(b => {
     const pos = positions[b.id];
     if (!pos) return;
@@ -298,7 +260,6 @@ export async function exportMapAsJpg({
     ctx.fillStyle = '#fff';
     ctx.fillText(ICON_EMOJI[b.icon] || '●', x, y + 1);
 
-    // Название
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = COLORS.text;
     ctx.strokeStyle = COLORS.bgCard;
@@ -307,7 +268,6 @@ export async function exportMapAsJpg({
     ctx.strokeText(b.name, x, y + R_POINT_PX + 16);
     ctx.fillText(b.name, x, y + R_POINT_PX + 16);
 
-    // Счётчик
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.fillStyle = under ? COLORS.danger : COLORS.textDim;
     const counterText = `${players.length}/${minReq} • ${sum.toLocaleString('ru-RU')}`;
@@ -315,7 +275,6 @@ export async function exportMapAsJpg({
     ctx.fillText(counterText, x, y + R_POINT_PX + 32);
   });
 
-  // ---- маркеры бочек ----
   (barrelZones || []).forEach(zone => {
     const x = tx(zone.x), y = ty(zone.y);
     ctx.fillStyle = COLORS.bgCard2;
@@ -333,7 +292,6 @@ export async function exportMapAsJpg({
     ctx.fillText('🛢️', x, y + 1);
   });
 
-  // ---- таблицы ----
   const cardsStartY = mapY + mapH + PADDING;
   const cardsTotalW = CANVAS_WIDTH - PADDING * 2;
   const colWidth = (cardsTotalW - (columns - 1) * CARD_GAP) / columns;
@@ -366,7 +324,6 @@ export async function exportMapAsJpg({
     currentY += rowHeight + CARD_BOTTOM_MARGIN;
   }
 
-  // ---- скачиваем ----
   return new Promise((resolve, reject) => {
     try {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
@@ -384,7 +341,6 @@ export async function exportMapAsJpg({
 }
 
 function drawCard(ctx, { x, y, width, height, building, players, settings }) {
-  // Фон
   ctx.fillStyle = COLORS.bgCard;
   roundRect(ctx, x, y, width, height, 12);
   ctx.fill();
@@ -396,14 +352,12 @@ function drawCard(ctx, { x, y, width, height, building, players, settings }) {
   const minReq = settings.minPlayers?.[building.id] ?? building.minPlayers ?? 0;
   const under = players.length < minReq;
 
-  // Заголовок слева
   ctx.font = 'bold 15px system-ui, sans-serif';
   ctx.fillStyle = under ? COLORS.danger : COLORS.text;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(building.name, x + CARD_PADDING, y + CARD_HEADER_HEIGHT / 2 + 4);
 
-  // Счётчик справа
   ctx.textAlign = 'right';
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.fillStyle = under ? COLORS.danger : COLORS.textDim;
@@ -413,52 +367,76 @@ function drawCard(ctx, { x, y, width, height, building, players, settings }) {
     y + CARD_HEADER_HEIGHT / 2 + 4
   );
 
-  // Разделитель
   ctx.strokeStyle = COLORS.border;
   ctx.beginPath();
   ctx.moveTo(x + CARD_PADDING, y + CARD_HEADER_HEIGHT);
   ctx.lineTo(x + width - CARD_PADDING, y + CARD_HEADER_HEIGHT);
   ctx.stroke();
 
-  // Игроки
   players.forEach((p, i) => {
-    const rowY = y + CARD_HEADER_HEIGHT + CARD_PADDING / 2 + i * CARD_ROW_HEIGHT + CARD_ROW_HEIGHT / 2;
-
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillStyle = COLORS.text;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    const rowTop = y + CARD_HEADER_HEIGHT + CARD_PADDING / 2 + i * CARD_ROW_HEIGHT;
+    const rowY = rowTop + CARD_ROW_HEIGHT / 2;
 
     const roles = p.player.roles || [];
     const pilot = roles.includes('pilot') ? ' ✈️' : '';
     const barrel = roles.includes('barrel') ? ' 🛢️' : '';
 
-    let nameText = `${i + 1}. ${p.player.nick}${pilot}${barrel}`;
-
     const flights = (p.player.flights || []).slice()
       .sort((a, b) => (a.atMinute || 0) - (b.atMinute || 0));
-    if (flights.length > 0) {
-      const targets = flights.map(f => {
-        const t = BUILDINGS.find(b => b.id === f.toBuildingId);
-        return t ? t.name : f.toBuildingId;
-      });
-      nameText += ` → ${targets.join(' → ')}`;
+
+    const chain = flights
+      .map(f => SHORT_NAMES[f.toBuildingId] || f.toBuildingId)
+      .filter(Boolean);
+
+    if (roles.includes('barrel')) chain.push('Бочки');
+
+    const chainText = chain.length > 0 ? `→ ${chain.join(' → ')}` : '';
+    const nickText = `${i + 1}. ${p.player.nick}${pilot}${barrel}`;
+
+    const powerText = (p.player.power || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    ctx.font = 'bold 13px ui-monospace, monospace';
+    const powerWidth = ctx.measureText(powerText).width;
+    const reservedRight = powerWidth + 12;
+    const availableWidth = width - CARD_PADDING * 2 - reservedRight;
+
+    ctx.font = '13px system-ui, sans-serif';
+    const fullText = chainText ? `${nickText} ${chainText}` : nickText;
+    const fullWidth = ctx.measureText(fullText).width;
+
+    if (fullWidth <= availableWidth) {
+      ctx.fillStyle = COLORS.text;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(fullText, x + CARD_PADDING, rowY);
+    } else {
+      ctx.fillStyle = COLORS.text;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+
+      const nickWidth = ctx.measureText(nickText).width;
+      const nickTruncated = nickWidth > availableWidth
+        ? truncateText(ctx, nickText, availableWidth)
+        : nickText;
+      ctx.fillText(nickTruncated, x + CARD_PADDING, rowTop + 4);
+
+      if (chainText) {
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = COLORS.accent;
+        const chainWidth = ctx.measureText(chainText).width;
+        const chainTruncated = chainWidth > availableWidth
+          ? truncateText(ctx, chainText, availableWidth)
+          : chainText;
+        ctx.fillText(chainTruncated, x + CARD_PADDING, rowTop + 18);
+      }
     }
 
-    const maxNameWidth = width - CARD_PADDING * 2 - 80;
-    ctx.fillText(truncateText(ctx, nameText, maxNameWidth), x + CARD_PADDING, rowY);
-
     ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
     ctx.font = 'bold 13px ui-monospace, monospace';
     ctx.fillStyle = COLORS.accent;
-    ctx.fillText(
-      (p.player.power || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 }),
-      x + width - CARD_PADDING,
-      rowY
-    );
+    ctx.fillText(powerText, x + width - CARD_PADDING, rowY);
   });
 
-  // Пусто
   if (players.length === 0) {
     ctx.font = 'italic 12px system-ui, sans-serif';
     ctx.fillStyle = COLORS.textDim;

@@ -1,4 +1,5 @@
 import { BUILDINGS } from './allocator.js';
+import { SHORT_NAMES } from './short-names.js';
 
 const IS_TOUCH_DEVICE = window.matchMedia('(pointer: coarse)').matches;
 
@@ -124,9 +125,12 @@ export function makePlacedChip(player, from) {
     if (!target) return;
     const flightStage = getFlightStage(player, f.toBuildingId);
     if (flightStage <= stage) return;
+
+    const shortLabel = SHORT_NAMES[target.id] || target.name;
     flightNotes.push(
-      `<span class="building-card__pilot-note building-card__flight-note" title="Перелёт в ${f.atMinute} мин">` +
-      `<i class="fa-solid fa-share"></i> (${flightStage}) ${escapeHtml(target.name)}</span>`
+      `<span class="building-card__pilot-note building-card__flight-note" ` +
+      `title="${escapeHtml(target.name)} (перелёт в ${f.atMinute} мин)">` +
+      `<i class="fa-solid fa-share"></i> (${flightStage}) ${escapeHtml(shortLabel)}</span>`
     );
   });
 
@@ -198,7 +202,7 @@ function formatPower(p) {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
 
-// ---------- Оверлей / центр экрана ----------
+// ---------- Оверлей меню ----------
 function positionMenu(menu, anchor) {
   document.querySelectorAll('.menu-overlay').forEach(m => m.remove());
 
@@ -235,7 +239,7 @@ function bindMenuClose(menu) {
   document.addEventListener('keydown', escHandler);
 }
 
-// ---------- Меню для игрока в пуле ----------
+// ---------- Меню пула ----------
 function openPoolChipMenu(chip, player) {
   document.querySelectorAll('.menu-overlay').forEach(m => m.remove());
 
@@ -305,7 +309,7 @@ function openPoolChipMenu(chip, player) {
   bindMenuClose(menu);
 }
 
-// ---------- Меню для игрока в таблице ----------
+// ---------- Меню таблицы ----------
 function openPlacedChipMenu(chip, player, fromBuildingId) {
   document.querySelectorAll('.menu-overlay').forEach(m => m.remove());
 
@@ -521,7 +525,10 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
     }
 
     card.querySelector('.building-card__copy').onclick = () => {
-      const text = buildCopyText(b, allocation, players);
+      const useShort = (typeof window.__getUseShortNames === 'function')
+        ? window.__getUseShortNames()
+        : false;
+      const text = buildCopyText(b, allocation, players, useShort);
       copyTextToClipboard(text);
     };
 
@@ -529,7 +536,7 @@ export function renderBuildings(allocation, players, filter = 'all', openMinutes
   });
 }
 
-function buildCopyText(building, allocation, players) {
+function buildCopyText(building, allocation, players, useShortNames = false) {
   const list = allocation[building.id] || [];
 
   const byId = new Map();
@@ -553,7 +560,7 @@ function buildCopyText(building, allocation, players) {
   const lines = [building.name];
   let n = 1;
 
-    finalList.forEach(p => {
+  finalList.forEach(p => {
     const player = byId.get(p.id) || p;
     const roles = player.roles || [];
     const stage = computeStage(player, building.id);
@@ -564,17 +571,16 @@ function buildCopyText(building, allocation, players) {
       const flightStage = getFlightStage(player, f.toBuildingId);
       if (flightStage <= stage) return;
       const target = BUILDINGS.find(x => x.id === f.toBuildingId);
-      if (target) tags.push(target.name);
+      if (target) {
+        tags.push(useShortNames ? (SHORT_NAMES[target.id] || target.name) : target.name);
+      }
     });
 
     if (roles.includes('barrel')) {
       tags.push('Бочки');
     }
 
-    // Пометка роли в имени
-    const isPilot = roles.includes('pilot');
-    const nick = isPilot ? `${player.nick} (летчик)` : player.nick;
-
+    const nick = roles.includes('pilot') ? `${player.nick} (летчик)` : player.nick;
     const suffix = tags.length ? ` → ${tags.join(' → ')}` : '';
     lines.push(`${n}. ${nick}${suffix}`);
     n++;
@@ -603,7 +609,7 @@ async function copyTextToClipboard(text) {
   }
 }
 
-// ---------- Список союза (модалка) ----------
+// ---------- Список союза ----------
 export function renderAllianceManageList(members, addedIds, handlers) {
   const list = document.getElementById('alliance-manage-list');
   list.innerHTML = '';
